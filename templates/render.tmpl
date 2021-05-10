@@ -3,40 +3,105 @@
 	Render {{ .hash }}
 </h1>
 
+<!-- <script src="http://localhost:8080/h/bafkreihvktjpbetsy33rir7l7zctfu5r3umvtphgnh42ltgjtzso6uixfe" defer=""></script> -->
+
 <div id="content">EMPTY</div>
+
+<pre id="overrides">OVERRIDES</pre>
+
 <script>
     var overrides = {};
+    const upload = true;
+    // const baseUrl = "https://golang.org/pkg/strings/";
+    const baseUrl = "https://golang.org/";
     async function go() {
-        t = await (await fetch("/h/{{ .hash }}")).text();
-        try {
+        const url = new URL(window.location.href);
+        console.log(url);
+        const segments = url.pathname.split("/");
+        console.log(segments);
+        // 0 -> ""
+        // 1 -> "web"
+        const hash = segments[2];
+        t = await (await fetch("/h/" + hash)).text();
+        for (i = 3; i < segments.length; i++) {
             const obj = JSON.parse(t);
-            if (obj.target) {
-                console.log("target", obj.target);
-                overrides = obj.overrides;
-                console.log("overrides", overrides);
-                // Send overrides to sw.
-                t = await (await fetch("/h/" + obj.target)).text();
-                document.open();
-                document.write(t);
-                document.close();
-                return;
-            } else {
-                // Continue
+            console.log("dir", obj);
+            // overrides = obj.overrides;
+            // console.log("overrides", overrides);
+            // Send overrides to sw.
+            const segment = segments[i];
+            Object.assign(overrides, obj.overrides);
+            document.getElementById('overrides').innerText = JSON.stringify(overrides, null, 2);
+            const hash = obj.overrides[segment];
+            if (hash == undefined) {
+                t = "error: could not find path segment: " + segment;
+                break;
             }
-        } catch (e) {
-            // Continue.
+            t = await (await fetch("/h/" + hash)).text();
         }
         // https://stackoverflow.com/questions/483745/replace-html-page-with-contents-retrieved-via-ajax
-        document.open();
-        document.write(t);
-        document.close();
+        // document.open();
+        // document.write(t);
+        // document.close();
+        // document.getElementById("content").innerHTML = t;
+
+        const content = document.createElement("div");
+        content.innerHTML = t;
+
+        const tags = ['link', 'img', 'script'];
+        for (tag of tags) {
+            console.log("tag: ", tag);
+            for (element of content.getElementsByTagName(tag)) {
+                for (attr of ['src', 'href']) {
+                    const src = element.getAttribute(attr);
+                    if (src != "" && src != null) {
+                        console.log('old URL: ', src);
+                        const originalURL = new URL(src, baseUrl);
+                        console.log('original URL: ', originalURL.toString());
+                        // element.src = newURL.toString();
+                        if (upload) {
+                            console.log('uploading');
+                            const response = await fetch("http://localhost:8080/proxy?target=" + originalURL.toString(), {redirect: "follow", headers: {"multiverse-fetch": "true"}});
+                            const hash = await response.text();
+                            console.log("hash: ", hash);
+                            // const uploadResponse = await fetch("/upload", { method: "POST", body: data, headers: {"multiverse-fetch": "true"} });
+                            // const hash = await uploadResponse.text();
+                            overrides[src] = hash;
+                            element.setAttribute(attr, "http://localhost:8080/h/" + hash);
+                            // element.src = "http://localhost:8080/h/" + hash;
+                            // res = {url: "/h/" + hash};
+                        } else {
+                        }
+                    }
+                }
+            }
+        }
+        document.getElementById('overrides').innerText = JSON.stringify(overrides, null, 2);
+
+        document.getElementById("content").append(content);
+
+        // https://www.sitepoint.com/community/t/running-script-in-innerhtml/6168/7
+        for (element of content.getElementsByTagName('script')) {
+            const script = document.createElement('script');
+            const src = element.getAttribute('src');
+            if (src != null) {
+                console.log(src);
+                script.src = element.getAttribute('src');
+                document.body.appendChild(script);
+            }
+        }
+
+
+        const v = document.body.childNodes[0];
+        const newNode = document.createElement("a");
+        newNode.innerText = "MULTIVERSE"
+        // document.body.insertBefore(e, v);
     }
     navigator.serviceWorker.addEventListener('message', async event => {
         const hash = "bafkreiag6clwepuduyo6nhyyqcj6rbpnnj6e3i7xc7uezxq7nc7nban44e";
         const url = event.data.url;
-        const upload = false;
         var res = {};
-        if (url.startsWith("http://localhost:8080/")
+        if (url.startsWith("http://localhost:8080/h/")
             || url.startsWith("https://multiverse-312721.nw.r.appspot.com/")
             ) {
             // Default.
@@ -53,29 +118,27 @@
                 console.log("url mapped to hash: ", hash);
                 res = {url: "/h/" + hash};
             } else {
+                var originalUrl = url.replace("http://localhost:8080/", baseUrl);
+                console.log('missing URL ' + url + " (" + originalUrl + ")");
                 if (upload) {
-                    /*
-                    console.log('caching ' + url);
-                    const response = await fetch(url, {redirect: "follow"});
+                    // console.log('uploading');
+                    // const response = await fetch(url, {redirect: "follow", headers: {"multiverse-fetch": "true"}});
                     // console.log("download response: ", response);
-                    const data = new FormData();
-                    data.append("file", await response.blob(), "file");
-                    const uploadResponse = await fetch("/upload", { method: "POST", body: data });
-                    // console.log("upload response: ", uploadResponse);
-                    const hash = await uploadResponse.text();
-                    overrides[url] = hash;
-                    res = {url: "/h/" + hash};
-                    */
-                    res = {url: url, upload: true};
+                    // const data = new FormData();
+                    // data.append("file", await response.blob(), "file");
+                    // const uploadResponse = await fetch("/upload", { method: "POST", body: data, headers: {"multiverse-fetch": "true"} });
+                    // const hash = await uploadResponse.text();
+                    // overrides[url] = hash;
+                    // res = {url: "/h/" + hash};
                 } else {
                     res = {};
                 }
             }
         }
-        console.log(overrides);
-        // console.log("sending ", res);
         event.data.s.postMessage(res);
     });
+    go();
+    /*
     navigator.serviceWorker.register('/render_sw.js').then((registration) => {
         console.log('registration succeeded')
         registration.update().then((_) => {
@@ -84,6 +147,7 @@
     }).catch((error) => {
         console.log("registration failed: ", error);
     });
+    */
 
 </script>
 

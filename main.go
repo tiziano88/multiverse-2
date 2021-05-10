@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"strings"
 
 	"cloud.google.com/go/storage"
 	"github.com/gin-gonic/gin"
@@ -44,7 +45,12 @@ func main() {
 	router.POST("/upload", uploadHandler)
 	router.GET("/snapshot", snapshotHandler)
 	router.GET("/h/:hash", hashHandler)
+
+	router.GET("/web/:hash/*path", renderHandler)
 	router.GET("/web/:hash", renderHandler)
+
+	router.GET("/proxy", proxyHandler)
+
 	router.Run()
 
 	appengine.Main()
@@ -87,12 +93,17 @@ func uploadHandler(c *gin.Context) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	h := hash(b)
-	err = dataStore.Set(c, h, b)
+	h := add(c, b)
+	c.String(http.StatusOK, "%s", h)
+}
+
+func add(c context.Context, blob []byte) string {
+	h := hash(blob)
+	err := dataStore.Set(c, h, blob)
 	if err != nil {
 		log.Fatal(err)
 	}
-	c.String(http.StatusOK, "%s", h)
+	return h
 }
 
 func hashHandler(c *gin.Context) {
@@ -108,9 +119,32 @@ func hashHandler(c *gin.Context) {
 
 func renderHandler(c *gin.Context) {
 	hash := c.Param("hash")
+	path := strings.Split(c.Param("path"), "/")
+	log.Printf("path: %s", path)
 	c.HTML(http.StatusOK, "render.tmpl", gin.H{
 		"hash": hash,
+		"path": path,
 	})
+}
+
+func proxyHandler(c *gin.Context) {
+	target := c.Query("target")
+	log.Printf("proxy: %s", target)
+	res, err := http.Get(target)
+	if err != nil {
+		log.Print(err)
+		c.Abort()
+		return
+	}
+	blob, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		log.Print(err)
+		c.Abort()
+		return
+	}
+	h := add(c, blob)
+	log.Printf("%s -> %s", target, h)
+	c.String(http.StatusOK, "%s", h)
 }
 
 func snapshotHandler(c *gin.Context) {

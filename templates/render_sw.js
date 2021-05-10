@@ -1,17 +1,19 @@
 self.addEventListener('install', function (event) {
     // Perform install steps
-    console.log("SW installed");
+    console.log("SW1 installed");
+    self.skipWaiting();
 });
 
 self.addEventListener('activate', function (event) {
     // Perform install steps
-    console.log("SW activated");
+    console.log("SW1 activated");
+    self.skipWaiting();
 });
 
 var overrides = {};
 
 const handleRequest = async function(event, clients)  {
-    console.log("event: ", event);
+    console.log("event2: ", event);
     const client = await clients.get(event.clientId);
     if (client) {
         var channel = new MessageChannel();
@@ -74,5 +76,11 @@ const handleRequest = async function(event, clients)  {
 }
 
 self.addEventListener('fetch', function (event) {
-    event.respondWith(handleRequest(event, self.clients));
+    console.log("fetch event", event.request);
+    if (event.request.headers["multiverse-fetch"]) {
+        console.log("skip");
+        // default
+    } else {
+        event.respondWith(handleRequest(event, self.clients));
+    }
 });
