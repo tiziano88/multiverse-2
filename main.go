@@ -2,9 +2,13 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"html/template"
 	"io/ioutil"
 	"log"
 	"net/http"
+	"path"
 	"strings"
 
 	"cloud.google.com/go/storage"
@@ -22,6 +26,7 @@ type Manifest struct {
 var dataStore DataStore
 
 const bucketName = "multiverse-312721.appspot.com"
+const webSuffix = ".web.localhost:8080"
 
 const cidDir = 0x88
 
@@ -39,17 +44,17 @@ func main() {
 
 	router := gin.Default()
 	router.LoadHTMLGlob("templates/*")
-	router.GET("/", indexHandler)
-	router.GET("/render_sw.js", swHandler)
-	router.GET("/snapshot_sw.js", snapshotSwHandler)
-	router.POST("/upload", uploadHandler)
-	router.GET("/snapshot", snapshotHandler)
-	router.GET("/h/:hash", hashHandler)
+	// router.GET("/", indexHandler)
+	// router.GET("/render_sw.js", swHandler)
+	// router.GET("/snapshot_sw.js", snapshotSwHandler)
+	// TODO: individual upload vs in-tree
+	router.POST("/*path", uploadHandler)
+	// router.GET("/snapshot", snapshotHandler)
+	// router.GET("/h/:hash", hashHandler)
 
-	router.GET("/web/:hash/*path", renderHandler)
-	router.GET("/web/:hash", renderHandler)
+	router.GET("/*path", renderHandler)
 
-	router.GET("/proxy", proxyHandler)
+	// router.GET("/proxy", proxyHandler)
 
 	router.Run()
 
@@ -78,13 +83,14 @@ func uploadHandler(c *gin.Context) {
 			log.Printf("dir: %d %v", f, dir[f].Filename)
 		}
 	}
+
 	file, err := c.FormFile("file")
 	if err != nil {
 		log.Print(err)
 		c.Abort()
 		return
 	}
-	log.Println(file.Filename)
+	log.Printf("filename: %s", file.Filename)
 	mpFile, err := file.Open()
 	if err != nil {
 		log.Fatal(err)
@@ -93,8 +99,34 @@ func uploadHandler(c *gin.Context) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	h := add(c, b)
-	c.String(http.StatusOK, "%s", h)
+
+	host := c.Request.Host
+	pathString := c.Param("path")
+	pathString = strings.TrimPrefix(pathString, "/")
+	segments := strings.Split(pathString, "/")
+	log.Printf("host: %v", host)
+	log.Printf("path: %v", pathString)
+	log.Printf("segments: %#v", segments)
+
+	hash := ""
+
+	if strings.HasSuffix(host, webSuffix) {
+		hash = strings.TrimSuffix(host, webSuffix)
+		log.Printf("hash: %v", hash)
+	}
+
+	segments = append(segments, file.Filename)
+
+	h, err := traverseAdd(c, hash, segments, b)
+	if err != nil {
+		log.Print(err)
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+
+	targetURL := fmt.Sprintf("http://%s%s%s", h, webSuffix, c.Param("path"))
+	// c.String(http.StatusOK, "%s", targetURL)
+	c.Redirect(http.StatusFound, targetURL)
 }
 
 func add(c context.Context, blob []byte) string {
@@ -104,6 +136,71 @@ func add(c context.Context, blob []byte) string {
 		log.Fatal(err)
 	}
 	return h
+}
+
+func get(c context.Context, hash string) ([]byte, error) {
+	return dataStore.Get(c, hash)
+}
+
+func traverse(c context.Context, base string, segments []string) (string, error) {
+	if len(segments) == 0 || segments[0] == "" {
+		return base, nil
+	} else {
+		manifest := Manifest{}
+		bytes, err := get(c, base)
+		if err != nil {
+			return "", fmt.Errorf("could not get blob %s", base)
+		}
+		err = json.Unmarshal(bytes, &manifest)
+		if err != nil {
+			return "", fmt.Errorf("could not parse blob %s as manifest", base)
+		}
+		head := segments[0]
+		next := manifest.Overrides[head]
+		if next == "" {
+			return "", fmt.Errorf("could not traverse %s.%s", base, head)
+		}
+		return traverse(c, next, segments[1:])
+	}
+}
+
+func traverseAdd(c context.Context, base string, segments []string, blob []byte) (string, error) {
+	log.Printf("base: %v", base)
+	log.Printf("segments: %#v", segments)
+
+	manifest := Manifest{}
+	bytes, err := get(c, base)
+	if err != nil {
+		return "", fmt.Errorf("could not get blob %s", base)
+	}
+	err = json.Unmarshal(bytes, &manifest)
+	if err != nil {
+		return "", fmt.Errorf("could not parse blob %s as manifest: %v", base, err)
+	}
+
+	head := segments[0]
+
+	if len(segments) == 1 || segments[0] == "" {
+		newHash := add(c, blob)
+		manifest.Overrides[head] = newHash
+	} else {
+		next := manifest.Overrides[head]
+		log.Printf("next: %v", next)
+
+		newHash, err := traverseAdd(c, next, segments[1:], blob)
+		if err != nil {
+			return "", fmt.Errorf("could not call recursively: %v", err)
+		}
+
+		manifest.Overrides[head] = newHash
+	}
+
+	newManifest, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("could not marshal new manifest: %v", err)
+	}
+
+	return add(c, newManifest), nil
 }
 
 func hashHandler(c *gin.Context) {
@@ -118,12 +215,57 @@ func hashHandler(c *gin.Context) {
 }
 
 func renderHandler(c *gin.Context) {
-	hash := c.Param("hash")
-	path := strings.Split(c.Param("path"), "/")
-	log.Printf("path: %s", path)
+	host := c.Request.Host
+	pathString := c.Param("path")
+	pathString = strings.TrimPrefix(pathString, "/")
+	segments := strings.Split(pathString, "/")
+	log.Printf("host: %v", host)
+	log.Printf("path: %v", pathString)
+	log.Printf("segments: %#v", segments)
+
+	hash := ""
+
+	if host == "localhost:8080" {
+		hash = segments[0]
+		log.Printf("hash: %v", hash)
+		c.Redirect(http.StatusFound, fmt.Sprintf("//%s.web.localhost:8080", hash))
+		return
+	}
+
+	if strings.HasSuffix(host, webSuffix) {
+		hash = strings.TrimSuffix(host, webSuffix)
+		log.Printf("hash: %v", hash)
+	}
+
+	target, err := traverse(c, hash, segments)
+	if err != nil {
+		log.Print(err)
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	log.Printf("target: %s", target)
+	blob, err := get(c, target)
+	if err != nil {
+		log.Print(err)
+		c.Abort()
+		return
+	}
+	manifest := Manifest{}
+	err = json.Unmarshal(blob, &manifest)
+	if err != nil {
+		c.Data(http.StatusOK, "", blob)
+		return
+	}
+	base := ""
+	if segments[0] != "" {
+		base = fmt.Sprintf("/%s/", path.Join(segments...))
+	}
 	c.HTML(http.StatusOK, "render.tmpl", gin.H{
-		"hash": hash,
-		"path": path,
+		"hash":     target,
+		"path":     segments,
+		"blob":     template.HTML(blob),
+		"manifest": manifest,
+		"base":     base,
 	})
 }
 
