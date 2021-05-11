@@ -19,7 +19,6 @@ import (
 )
 
 type Manifest struct {
-	Target    string
 	Overrides map[string]string
 }
 
@@ -178,9 +177,17 @@ func traverseAdd(c context.Context, base string, segments []string, blob []byte)
 		return "", fmt.Errorf("could not parse blob %s as manifest: %v", base, err)
 	}
 
+	if manifest.Overrides == nil {
+		manifest.Overrides = make(map[string]string)
+	}
+
 	head := segments[0]
 
-	if len(segments) == 1 || segments[0] == "" {
+	if head == "" {
+		return traverseAdd(c, base, segments[1:], blob)
+	}
+
+	if len(segments) == 1 {
 		newHash := add(c, blob)
 		manifest.Overrides[head] = newHash
 	} else {
@@ -237,6 +244,12 @@ func renderHandler(c *gin.Context) {
 		log.Printf("hash: %v", hash)
 	}
 
+	if hash == "empty" {
+		hash = add(c, []byte("{}"))
+		c.Redirect(http.StatusFound, fmt.Sprintf("//%s.web.localhost:8080", hash))
+		return
+	}
+
 	target, err := traverse(c, hash, segments)
 	if err != nil {
 		log.Print(err)
@@ -253,6 +266,7 @@ func renderHandler(c *gin.Context) {
 	manifest := Manifest{}
 	err = json.Unmarshal(blob, &manifest)
 	if err != nil {
+		log.Printf("could not parse manifest: %v", err)
 		c.Data(http.StatusOK, "", blob)
 		return
 	}

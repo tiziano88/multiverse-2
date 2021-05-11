@@ -4,7 +4,7 @@
     <ul>
     <li><a href="..">..</a></li>
     {{ range $key, $value := .Overrides }}
-        <li><a href="{{ $base }}{{ $key }}">{{ $key }}</a></li>
+        <li><a href="{{ $base }}{{ $key }}">{{ with $key }}{{ . }}{{ else }}EMPTY{{ end }}</a></li>
     {{ end }}
     </ul>
 </div>
