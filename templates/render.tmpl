@@ -1,22 +1,31 @@
 {{ $base := .base }}
+{{ $parent := .parent }}
 {{ with .manifest }}
 <div>
     <ul>
-    <li><a href="..">..</a></li>
+    <li><a href="{{ $parent }}">..</a></li>
     {{ range $key, $value := .Overrides }}
-        <li><a href="{{ $base }}/{{ $key }}">{{ with $key }}{{ . }}{{ else }}EMPTY{{ end }}</a></li>
+        <li><a href="{{ $base }}{{ $key }}">{{ with $key }}{{ . }}{{ else }}EMPTY{{ end }}</a></li>
     {{ end }}
     </ul>
 </div>
 
 <form action="?" method="post" enctype="multipart/form-data">
 	<div>
-		Add File:
-		<input type="file" id="file" name="file">
+		Add Files:
+		<input type="file" id="file" name="file" multiple="multiple">
 	</div>
-	<div>
+	<!-- <div>
 		Add Dir:
 		<input type="file" id="file" name="directory" webkitdirectory>
+	</div> -->
+	<input type="submit">
+</form>
+
+<form action="?" method="post" >
+	<div>
+		Create empty directory
+		<input type="text" id="dir" name="dir">
 	</div>
 	<input type="submit">
 </form>

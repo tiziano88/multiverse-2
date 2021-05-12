@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path"
 	"strings"
 
 	"cloud.google.com/go/storage"
@@ -82,29 +83,18 @@ func snapshotSwHandler(c *gin.Context) {
 func uploadHandler(c *gin.Context) {
 	// See https://github.com/gin-gonic/gin#upload-files .
 	form, err := c.MultipartForm()
-	log.Printf("form: %v", form)
-	dir := form.File["directory"]
-	if dir != nil {
-		for f := range dir {
-			log.Printf("dir: %d %v", f, dir[f].Filename)
-		}
-	}
-
-	file, err := c.FormFile("file")
 	if err != nil {
 		log.Print(err)
-		c.Abort()
-		return
 	}
-	log.Printf("filename: %s", file.Filename)
-	mpFile, err := file.Open()
-	if err != nil {
-		log.Fatal(err)
-	}
-	b, err := ioutil.ReadAll(mpFile)
-	if err != nil {
-		log.Fatal(err)
-	}
+	/*
+		log.Printf("form: %v", form)
+		dir := form.File["directory"]
+		if dir != nil {
+			for f := range dir {
+				log.Printf("dir: %d %v", f, dir[f].Filename)
+			}
+		}
+	*/
 
 	host := c.Request.Host
 	pathString := c.Param("path")
@@ -115,22 +105,48 @@ func uploadHandler(c *gin.Context) {
 	log.Printf("segments: %#v", segments)
 
 	hash := ""
-
 	if strings.HasSuffix(host, webSuffix) {
 		hash = strings.TrimSuffix(host, webSuffix)
 		log.Printf("hash: %v", hash)
 	}
 
-	segments = append(segments, file.Filename)
-
-	h, err := traverseAdd(c, hash, segments, b)
-	if err != nil {
-		log.Print(err)
-		c.AbortWithStatus(http.StatusNotFound)
+	if dirName, _ := c.GetPostForm("dir"); dirName != "" {
+		log.Printf("creating empty dir: %s", dirName)
+		segments := strings.Split(pathString, "/")
+		segments = append(segments, dirName)
+		hash, err = traverseAdd(c, hash, segments, []byte("{}"))
+		if err != nil {
+			log.Print(err)
+			c.AbortWithStatus(http.StatusNotFound)
+			return
+		}
+		c.Redirect(http.StatusFound, fmt.Sprintf("//%s%s%s", hash, webSuffix, c.Param("path")))
 		return
 	}
 
-	targetURL := fmt.Sprintf("http://%s%s%s", h, webSuffix, c.Param("path"))
+	for _, file := range form.File["file"] {
+		log.Printf("processing file %s (%dB)", file.Filename, file.Size)
+		mpFile, err := file.Open()
+		if err != nil {
+			log.Fatal(err)
+		}
+		b, err := ioutil.ReadAll(mpFile)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		segments := strings.Split(pathString, "/")
+		segments = append(segments, file.Filename)
+
+		hash, err = traverseAdd(c, hash, segments, b)
+		if err != nil {
+			log.Print(err)
+			c.AbortWithStatus(http.StatusNotFound)
+			return
+		}
+	}
+
+	targetURL := fmt.Sprintf("http://%s%s%s", hash, webSuffix, c.Param("path"))
 	// c.String(http.StatusOK, "%s", targetURL)
 	c.Redirect(http.StatusFound, targetURL)
 }
@@ -164,7 +180,7 @@ func traverse(c context.Context, base string, segments []string) (string, error)
 		head := segments[0]
 		next := manifest.Overrides[head]
 		if next == "" {
-			return "", fmt.Errorf("could not traverse %s.%s", base, head)
+			return "", fmt.Errorf("could not traverse %s/%s", base, head)
 		}
 		return traverse(c, next, segments[1:])
 	}
@@ -278,8 +294,8 @@ func renderHandler(c *gin.Context) {
 		return
 	}
 	base := c.Param("path")
-	if base == "/" {
-		base = ""
+	if !strings.HasSuffix(base, "/") {
+		base += "/"
 	}
 	c.HTML(http.StatusOK, "render.tmpl", gin.H{
 		"hash":     target,
@@ -287,6 +303,7 @@ func renderHandler(c *gin.Context) {
 		"blob":     template.HTML(blob),
 		"manifest": manifest,
 		"base":     base,
+		"parent":   path.Dir(path.Dir(base)),
 	})
 }
 
