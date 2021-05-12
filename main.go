@@ -7,9 +7,11 @@ import (
 	"html/template"
 	"io/ioutil"
 	"log"
+	"mime"
 	"net/http"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 
 	"cloud.google.com/go/storage"
@@ -290,6 +292,13 @@ func renderHandler(c *gin.Context) {
 	err = json.Unmarshal(blob, &manifest)
 	if err != nil {
 		log.Printf("could not parse manifest: %v", err)
+		c.Header("multiverse-hash", target)
+		ext := filepath.Ext(pathString)
+		contentType := mime.TypeByExtension(ext)
+		if contentType == "" {
+			contentType = http.DetectContentType(blob)
+		}
+		c.Header("Content-Type", contentType)
 		c.Data(http.StatusOK, "", blob)
 		return
 	}
