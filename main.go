@@ -9,7 +9,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path"
 	"strings"
 
 	"cloud.google.com/go/storage"
@@ -109,10 +108,10 @@ func uploadHandler(c *gin.Context) {
 
 	host := c.Request.Host
 	pathString := c.Param("path")
+	log.Printf("path: %v", pathString)
 	pathString = strings.TrimPrefix(pathString, "/")
 	segments := strings.Split(pathString, "/")
 	log.Printf("host: %v", host)
-	log.Printf("path: %v", pathString)
 	log.Printf("segments: %#v", segments)
 
 	hash := ""
@@ -232,10 +231,10 @@ func hashHandler(c *gin.Context) {
 func renderHandler(c *gin.Context) {
 	host := c.Request.Host
 	pathString := c.Param("path")
+	log.Printf("path: %v", pathString)
 	pathString = strings.TrimPrefix(pathString, "/")
 	segments := strings.Split(pathString, "/")
 	log.Printf("host: %v", host)
-	log.Printf("path: %v", pathString)
 	log.Printf("segments: %#v", segments)
 
 	hash := ""
@@ -278,9 +277,9 @@ func renderHandler(c *gin.Context) {
 		c.Data(http.StatusOK, "", blob)
 		return
 	}
-	base := ""
-	if segments[0] != "" {
-		base = fmt.Sprintf("/%s/", path.Join(segments...))
+	base := c.Param("path")
+	if base == "/" {
+		base = ""
 	}
 	c.HTML(http.StatusOK, "render.tmpl", gin.H{
 		"hash":     target,
