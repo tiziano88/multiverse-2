@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	"path"
 	"strings"
 
@@ -25,11 +26,18 @@ type Manifest struct {
 var dataStore DataStore
 
 const bucketName = "multiverse-312721.appspot.com"
-const webSuffix = ".web.localhost:8080"
+
+var webSuffix = ".web.localhost:8080"
 
 const cidDir = 0x88
 
 func main() {
+	webSuffixEnv := os.Getenv("WEB_SUFFIX")
+	if webSuffixEnv != "" {
+		webSuffix = webSuffixEnv
+	}
+	log.Printf("web suffix: %#v", webSuffix)
+
 	ctx := context.Background()
 	storageClient, err := storage.NewClient(ctx)
 	if err != nil {
@@ -235,7 +243,7 @@ func renderHandler(c *gin.Context) {
 	if host == "localhost:8080" {
 		hash = segments[0]
 		log.Printf("hash: %v", hash)
-		c.Redirect(http.StatusFound, fmt.Sprintf("//%s.web.localhost:8080", hash))
+		c.Redirect(http.StatusFound, fmt.Sprintf("//%s%s", hash, webSuffix))
 		return
 	}
 
@@ -246,7 +254,7 @@ func renderHandler(c *gin.Context) {
 
 	if hash == "empty" {
 		hash = add(c, []byte("{}"))
-		c.Redirect(http.StatusFound, fmt.Sprintf("//%s.web.localhost:8080", hash))
+		c.Redirect(http.StatusFound, fmt.Sprintf("//%s%s", hash, webSuffix))
 		return
 	}
 
