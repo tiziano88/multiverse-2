@@ -1,11 +1,11 @@
-{{ $base := .base }}
+{{ $current := .current }}
 {{ $parent := .parent }}
 {{ with .node }}
 <div>
     <ul>
     <li><a href="{{ $parent }}">..</a></li>
     {{ range .Links }}
-        <li><a href="{{ $base }}{{ .Name }}">{{ with .Name }}{{ . }}{{ else }}EMPTY{{ end }}</a></li>
+        <li><a href="{{ $current }}{{ .Name }}">{{ with .Name }}{{ . }}{{ else }}EMPTY{{ end }}</a></li>
     {{ end }}
     </ul>
 </div>

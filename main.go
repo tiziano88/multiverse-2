@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"html/template"
 	"io/ioutil"
 	"log"
 	"mime"
@@ -51,18 +50,8 @@ func main() {
 
 	router := gin.Default()
 	router.LoadHTMLGlob("templates/*")
-	// router.GET("/", indexHandler)
-	// router.GET("/render_sw.js", swHandler)
-	// router.GET("/snapshot_sw.js", snapshotSwHandler)
-	// TODO: individual upload vs in-tree
 	router.POST("/*path", uploadHandler)
-	// router.GET("/snapshot", snapshotHandler)
-	// router.GET("/h/:hash", hashHandler)
-
 	router.GET("/*path", renderHandler)
-
-	// router.GET("/proxy", proxyHandler)
-
 	router.Run()
 
 	appengine.Main()
@@ -81,16 +70,6 @@ func snapshotSwHandler(c *gin.Context) {
 }
 
 func uploadHandler(c *gin.Context) {
-	/*
-		log.Printf("form: %v", form)
-		dir := form.File["directory"]
-		if dir != nil {
-			for f := range dir {
-				log.Printf("dir: %d %v", f, dir[f].Filename)
-			}
-		}
-	*/
-
 	host := c.Request.Host
 	pathString := c.Param("path")
 	log.Printf("path: %v", pathString)
@@ -295,39 +274,39 @@ func renderHandler(c *gin.Context) {
 	log.Printf("host: %v", host)
 	log.Printf("segments: %#v", segments)
 
-	hash := cid.Undef
+	base := cid.Undef
 	var err error
 
 	if host == "localhost:8080" {
-		hash, err = cid.Decode(segments[0])
+		base, err = cid.Decode(segments[0])
 		if err != nil {
 			log.Print(err)
 			c.AbortWithStatus(http.StatusNotFound)
 			return
 		}
-		log.Printf("hash: %v", hash)
-		c.Redirect(http.StatusFound, fmt.Sprintf("//%s%s", hash, webSuffix))
+		log.Printf("base: %v", base)
+		c.Redirect(http.StatusFound, fmt.Sprintf("//%s%s", base, webSuffix))
 		return
 	}
 
 	if strings.HasSuffix(host, webSuffix) {
-		subdomain := strings.TrimSuffix(host, webSuffix)
-		if subdomain == "empty" {
-			hash = addNode(c, &merkledag_pb.PBNode{})
-			c.Redirect(http.StatusFound, fmt.Sprintf("//%s%s", hash, webSuffix))
+		baseDomain := strings.TrimSuffix(host, webSuffix)
+		if baseDomain == "empty" {
+			target := addNode(c, &merkledag_pb.PBNode{})
+			c.Redirect(http.StatusFound, fmt.Sprintf("//%s%s", target, webSuffix))
 			return
 		}
 
-		hash, err = cid.Decode(subdomain)
+		base, err = cid.Decode(baseDomain)
 		if err != nil {
 			log.Print(err)
 			c.AbortWithStatus(http.StatusNotFound)
 			return
 		}
-		log.Printf("hash: %v", hash)
+		log.Printf("base: %v", base)
 	}
 
-	target, err := traverse(c, hash, segments)
+	target, err := traverse(c, base, segments)
 	if err != nil {
 		log.Print(err)
 		c.AbortWithStatus(http.StatusNotFound)
@@ -366,20 +345,19 @@ func renderHandler(c *gin.Context) {
 			c.Data(http.StatusOK, "", blob)
 			return
 		}
-		base := c.Param("path")
-		if !strings.HasSuffix(base, "/") {
-			base += "/"
+		current := c.Param("path")
+		if !strings.HasSuffix(current, "/") {
+			current += "/"
 		}
 		c.HTML(http.StatusOK, "render.tmpl", gin.H{
-			"hash":   target,
-			"path":   segments,
-			"blob":   template.HTML(blob),
-			"node":   node,
-			"base":   base,
-			"parent": path.Dir(path.Dir(base)),
+			"hash":    target,
+			"path":    segments,
+			"node":    node,
+			"parent":  path.Dir(path.Dir(current)),
+			"current": current,
 		})
 	} else {
-		log.Print("unknown codec: %v", hash.Prefix().Codec)
+		log.Print("unknown codec: %v", target.Prefix().Codec)
 		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
