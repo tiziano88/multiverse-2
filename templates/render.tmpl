@@ -1,11 +1,11 @@
 {{ $base := .base }}
 {{ $parent := .parent }}
-{{ with .manifest }}
+{{ with .node }}
 <div>
     <ul>
     <li><a href="{{ $parent }}">..</a></li>
-    {{ range $key, $value := .Overrides }}
-        <li><a href="{{ $base }}{{ $key }}">{{ with $key }}{{ . }}{{ else }}EMPTY{{ end }}</a></li>
+    {{ range .Links }}
+        <li><a href="{{ $base }}{{ .Name }}">{{ with .Name }}{{ . }}{{ else }}EMPTY{{ end }}</a></li>
     {{ end }}
     </ul>
 </div>

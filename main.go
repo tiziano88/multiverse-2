@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"html/template"
 	"io/ioutil"
@@ -12,18 +11,17 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"cloud.google.com/go/storage"
 	"github.com/gin-gonic/gin"
+	proto "github.com/gogo/protobuf/proto"
 	"github.com/ipfs/go-cid"
-	mh "github.com/multiformats/go-multihash"
+	merkledag_pb "github.com/ipfs/go-merkledag/pb"
+	"github.com/tiziano88/multiverse/utils"
 	"google.golang.org/appengine"
 )
-
-type Manifest struct {
-	Overrides map[string]string
-}
 
 var dataStore DataStore
 
@@ -83,11 +81,6 @@ func snapshotSwHandler(c *gin.Context) {
 }
 
 func uploadHandler(c *gin.Context) {
-	// See https://github.com/gin-gonic/gin#upload-files .
-	form, err := c.MultipartForm()
-	if err != nil {
-		log.Print(err)
-	}
 	/*
 		log.Printf("form: %v", form)
 		dir := form.File["directory"]
@@ -106,17 +99,58 @@ func uploadHandler(c *gin.Context) {
 	log.Printf("host: %v", host)
 	log.Printf("segments: %#v", segments)
 
-	hash := ""
+	hash := cid.Undef
+	var err error
 	if strings.HasSuffix(host, webSuffix) {
-		hash = strings.TrimSuffix(host, webSuffix)
+		hash, err = cid.Decode(strings.TrimSuffix(host, webSuffix))
+		if err != nil {
+			log.Print(err)
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
 		log.Printf("hash: %v", hash)
+	} else {
+		log.Print("straight upload")
+		codec := c.Query("codec")
+		log.Printf("codec: %v", codec)
+
+		codecParsed := cid.Raw
+
+		if codec != "" {
+			codecParsed, err = strconv.Atoi(codec)
+			if err != nil {
+				log.Print(err)
+				c.AbortWithStatus(http.StatusBadRequest)
+				return
+			}
+		}
+		// Straight upload.
+		bytes, err := ioutil.ReadAll(c.Request.Body)
+		if err != nil {
+			log.Print(err)
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+		hash := addCodec(c, uint64(codecParsed), bytes)
+		// c.Redirect(http.StatusFound, fmt.Sprintf("//%s%s", hash, webSuffix))
+		log.Printf("uploaded: %s", hash)
+		c.String(http.StatusOK, hash.String())
+		return
+	}
+
+	// See https://github.com/gin-gonic/gin#upload-files .
+	form, err := c.MultipartForm()
+	if err != nil {
+		log.Print(err)
 	}
 
 	if dirName, _ := c.GetPostForm("dir"); dirName != "" {
 		log.Printf("creating empty dir: %s", dirName)
 		segments := strings.Split(pathString, "/")
 		segments = append(segments, dirName)
-		hash, err = traverseAdd(c, hash, segments, []byte("{}"))
+
+		// Empty node.
+		hash, err = traverseAdd(c, hash, segments, cid.DagProtobuf, []byte{})
 		if err != nil {
 			log.Print(err)
 			c.AbortWithStatus(http.StatusNotFound)
@@ -140,7 +174,7 @@ func uploadHandler(c *gin.Context) {
 		segments := strings.Split(pathString, "/")
 		segments = append(segments, file.Filename)
 
-		hash, err = traverseAdd(c, hash, segments, b)
+		hash, err = traverseAdd(c, hash, segments, cid.Raw, b)
 		if err != nil {
 			log.Print(err)
 			c.AbortWithStatus(http.StatusNotFound)
@@ -153,86 +187,92 @@ func uploadHandler(c *gin.Context) {
 	c.Redirect(http.StatusFound, targetURL)
 }
 
-func add(c context.Context, blob []byte) string {
-	h := hash(blob)
-	err := dataStore.Set(c, h, blob)
+func addCodec(c context.Context, codec uint64, blob []byte) cid.Cid {
+	h := utils.HashCodec(codec, blob)
+	err := dataStore.Set(c, h.String(), blob)
 	if err != nil {
 		log.Fatal(err)
 	}
 	return h
 }
 
+func addRaw(c context.Context, blob []byte) cid.Cid {
+	return addCodec(c, cid.Raw, blob)
+}
+
+func addNode(c context.Context, node *merkledag_pb.PBNode) cid.Cid {
+	b, err := node.Marshal()
+	if err != nil {
+		log.Fatal(err)
+	}
+	return addCodec(c, cid.DagProtobuf, b)
+}
+
 func get(c context.Context, hash string) ([]byte, error) {
 	return dataStore.Get(c, hash)
 }
 
-func traverse(c context.Context, base string, segments []string) (string, error) {
+func traverse(c context.Context, base cid.Cid, segments []string) (cid.Cid, error) {
 	if len(segments) == 0 || segments[0] == "" {
 		return base, nil
 	} else {
-		manifest := Manifest{}
-		bytes, err := get(c, base)
+		bytes, err := get(c, base.String())
 		if err != nil {
-			return "", fmt.Errorf("could not get blob %s", base)
+			return cid.Undef, fmt.Errorf("could not get blob %s", base)
 		}
-		err = json.Unmarshal(bytes, &manifest)
+		node := merkledag_pb.PBNode{}
+		err = node.Unmarshal(bytes)
 		if err != nil {
-			return "", fmt.Errorf("could not parse blob %s as manifest", base)
+			return cid.Undef, fmt.Errorf("could not parse blob %s as node", base)
 		}
 		head := segments[0]
-		next := manifest.Overrides[head]
-		if next == "" {
-			return "", fmt.Errorf("could not traverse %s/%s", base, head)
+		next, err := utils.GetLink(&node, head)
+		if err != nil {
+			return cid.Undef, fmt.Errorf("could not traverse %s/%s: %v", base, head, err)
 		}
 		return traverse(c, next, segments[1:])
 	}
 }
 
-func traverseAdd(c context.Context, base string, segments []string, blob []byte) (string, error) {
+func traverseAdd(c context.Context, base cid.Cid, segments []string, codec uint64, blob []byte) (cid.Cid, error) {
 	log.Printf("base: %v", base)
 	log.Printf("segments: %#v", segments)
 
-	manifest := Manifest{}
-	bytes, err := get(c, base)
+	node := merkledag_pb.PBNode{}
+	bytes, err := get(c, base.String())
 	if err != nil {
-		return "", fmt.Errorf("could not get blob %s", base)
+		return cid.Undef, fmt.Errorf("could not get blob %s", base)
 	}
-	err = json.Unmarshal(bytes, &manifest)
+	err = node.Unmarshal(bytes)
 	if err != nil {
-		return "", fmt.Errorf("could not parse blob %s as manifest: %v", base, err)
-	}
-
-	if manifest.Overrides == nil {
-		manifest.Overrides = make(map[string]string)
+		return cid.Undef, fmt.Errorf("could not parse blob %s as manifest: %v", base, err)
 	}
 
 	head := segments[0]
 
 	if head == "" {
-		return traverseAdd(c, base, segments[1:], blob)
+		return traverseAdd(c, base, segments[1:], codec, blob)
 	}
 
 	if len(segments) == 1 {
-		newHash := add(c, blob)
-		manifest.Overrides[head] = newHash
+		newHash := addCodec(c, codec, blob)
+		node.Links = append(node.Links, &merkledag_pb.PBLink{
+			Name: proto.String(head),
+			Hash: newHash.Bytes(),
+		})
 	} else {
-		next := manifest.Overrides[head]
+		next, err := utils.GetLink(&node, head)
 		log.Printf("next: %v", next)
 
-		newHash, err := traverseAdd(c, next, segments[1:], blob)
+		newHash, err := traverseAdd(c, next, segments[1:], codec, blob)
 		if err != nil {
-			return "", fmt.Errorf("could not call recursively: %v", err)
+			return cid.Undef, fmt.Errorf("could not call recursively: %v", err)
 		}
 
-		manifest.Overrides[head] = newHash
+		utils.SetLink(&node, head, newHash)
 	}
 
-	newManifest, err := json.MarshalIndent(manifest, "", "  ")
-	if err != nil {
-		return "", fmt.Errorf("could not marshal new manifest: %v", err)
-	}
-
-	return add(c, newManifest), nil
+	return addNode(c, &node), nil
 }
 
 func hashHandler(c *gin.Context) {
@@ -255,24 +295,36 @@ func renderHandler(c *gin.Context) {
 	log.Printf("host: %v", host)
 	log.Printf("segments: %#v", segments)
 
-	hash := ""
+	hash := cid.Undef
+	var err error
 
 	if host == "localhost:8080" {
-		hash = segments[0]
+		hash, err = cid.Decode(segments[0])
+		if err != nil {
+			log.Print(err)
+			c.AbortWithStatus(http.StatusNotFound)
+			return
+		}
 		log.Printf("hash: %v", hash)
 		c.Redirect(http.StatusFound, fmt.Sprintf("//%s%s", hash, webSuffix))
 		return
 	}
 
 	if strings.HasSuffix(host, webSuffix) {
-		hash = strings.TrimSuffix(host, webSuffix)
-		log.Printf("hash: %v", hash)
-	}
+		subdomain := strings.TrimSuffix(host, webSuffix)
+		if subdomain == "empty" {
+			hash = addNode(c, &merkledag_pb.PBNode{})
+			c.Redirect(http.StatusFound, fmt.Sprintf("//%s%s", hash, webSuffix))
+			return
+		}
 
-	if hash == "empty" {
-		hash = add(c, []byte("{}"))
-		c.Redirect(http.StatusFound, fmt.Sprintf("//%s%s", hash, webSuffix))
-		return
+		hash, err = cid.Decode(subdomain)
+		if err != nil {
+			log.Print(err)
+			c.AbortWithStatus(http.StatusNotFound)
+			return
+		}
+		log.Printf("hash: %v", hash)
 	}
 
 	target, err := traverse(c, hash, segments)
@@ -282,17 +334,15 @@ func renderHandler(c *gin.Context) {
 		return
 	}
 	log.Printf("target: %s", target)
-	blob, err := get(c, target)
+	log.Printf("target CID: %#v", target.Prefix())
+	blob, err := get(c, target.String())
 	if err != nil {
 		log.Print(err)
 		c.Abort()
 		return
 	}
-	manifest := Manifest{}
-	err = json.Unmarshal(blob, &manifest)
-	if err != nil {
-		log.Printf("could not parse manifest: %v", err)
-		c.Header("multiverse-hash", target)
+	if target.Prefix().Codec == cid.Raw {
+		c.Header("multiverse-hash", target.String())
 		ext := filepath.Ext(pathString)
 		contentType := mime.TypeByExtension(ext)
 		if contentType == "" {
@@ -301,19 +351,38 @@ func renderHandler(c *gin.Context) {
 		c.Header("Content-Type", contentType)
 		c.Data(http.StatusOK, "", blob)
 		return
+	} else if target.Prefix().Codec == cid.DagProtobuf {
+		node := merkledag_pb.PBNode{}
+		err = node.Unmarshal(blob)
+		if err != nil {
+			log.Printf("could not parse manifest: %v", err)
+			c.Header("multiverse-hash", target.String())
+			ext := filepath.Ext(pathString)
+			contentType := mime.TypeByExtension(ext)
+			if contentType == "" {
+				contentType = http.DetectContentType(blob)
+			}
+			c.Header("Content-Type", contentType)
+			c.Data(http.StatusOK, "", blob)
+			return
+		}
+		base := c.Param("path")
+		if !strings.HasSuffix(base, "/") {
+			base += "/"
+		}
+		c.HTML(http.StatusOK, "render.tmpl", gin.H{
+			"hash":   target,
+			"path":   segments,
+			"blob":   template.HTML(blob),
+			"node":   node,
+			"base":   base,
+			"parent": path.Dir(path.Dir(base)),
+		})
+	} else {
+		log.Print("unknown codec: %v", hash.Prefix().Codec)
+		c.AbortWithStatus(http.StatusBadRequest)
+		return
 	}
-	base := c.Param("path")
-	if !strings.HasSuffix(base, "/") {
-		base += "/"
-	}
-	c.HTML(http.StatusOK, "render.tmpl", gin.H{
-		"hash":     target,
-		"path":     segments,
-		"blob":     template.HTML(blob),
-		"manifest": manifest,
-		"base":     base,
-		"parent":   path.Dir(path.Dir(base)),
-	})
 }
 
 func proxyHandler(c *gin.Context) {
@@ -331,7 +400,7 @@ func proxyHandler(c *gin.Context) {
 		c.Abort()
 		return
 	}
-	h := add(c, blob)
+	h := addRaw(c, blob)
 	log.Printf("%s -> %s", target, h)
 	c.String(http.StatusOK, "%s", h)
 }
@@ -356,23 +425,6 @@ func snapshotHandler(c *gin.Context) {
 	c.HTML(http.StatusOK, "snapshot.tmpl", gin.H{
 		"target": target,
 	})
-}
-
-func hash(data []byte) string {
-	// Create a cid manually by specifying the 'prefix' parameters
-	// https://github.com/ipfs/go-cid
-	pref := cid.Prefix{
-		Version:  1,
-		Codec:    cid.Raw,
-		MhType:   mh.SHA2_256,
-		MhLength: -1, // default length
-	}
-
-	c, err := pref.Sum(data)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return c.String()
 }
 
 type DataStore interface {
