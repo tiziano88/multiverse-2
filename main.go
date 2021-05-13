@@ -52,6 +52,7 @@ func main() {
 	router.LoadHTMLGlob("templates/*")
 	router.POST("/*path", uploadHandler)
 	router.GET("/*path", renderHandler)
+
 	router.Run()
 
 	appengine.Main()
@@ -277,17 +278,19 @@ func renderHandler(c *gin.Context) {
 	base := cid.Undef
 	var err error
 
-	if host == "localhost:8080" {
-		base, err = cid.Decode(segments[0])
-		if err != nil {
-			log.Print(err)
-			c.AbortWithStatus(http.StatusNotFound)
+	/*
+		if host == "localhost:8080" {
+			base, err = cid.Decode(segments[0])
+			if err != nil {
+				log.Print(err)
+				c.AbortWithStatus(http.StatusNotFound)
+				return
+			}
+			log.Printf("base: %v", base)
+			c.Redirect(http.StatusFound, fmt.Sprintf("//%s%s", base, webSuffix))
 			return
 		}
-		log.Printf("base: %v", base)
-		c.Redirect(http.StatusFound, fmt.Sprintf("//%s%s", base, webSuffix))
-		return
-	}
+	*/
 
 	if strings.HasSuffix(host, webSuffix) {
 		baseDomain := strings.TrimSuffix(host, webSuffix)
@@ -306,6 +309,17 @@ func renderHandler(c *gin.Context) {
 		log.Printf("base: %v", base)
 	}
 
+	if len(segments) >= 2 && segments[0] == "blobs" {
+		log.Printf("API get blob")
+		base, err = cid.Decode(segments[1])
+		if err != nil {
+			log.Print(err)
+			c.AbortWithStatus(http.StatusNotFound)
+			return
+		}
+		segments = segments[2:]
+	}
+
 	target, err := traverse(c, base, segments)
 	if err != nil {
 		log.Print(err)
@@ -314,6 +328,23 @@ func renderHandler(c *gin.Context) {
 	}
 	log.Printf("target: %s", target)
 	log.Printf("target CID: %#v", target.Prefix())
+
+	if c.Query("stat") != "" {
+		ok, err := dataStore.Has(c, target.String())
+		if err != nil {
+			log.Print(err)
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+		if ok {
+			c.AbortWithStatus(http.StatusOK)
+			return
+		} else {
+			c.AbortWithStatus(http.StatusNotFound)
+			return
+		}
+	}
+
 	blob, err := get(c, target.String())
 	if err != nil {
 		log.Print(err)
@@ -408,6 +439,7 @@ func snapshotHandler(c *gin.Context) {
 type DataStore interface {
 	Set(ctx context.Context, name string, value []byte) error
 	Get(ctx context.Context, name string) ([]byte, error)
+	Has(ctx context.Context, name string) (bool, error)
 }
 
 type FileDataStore struct{}
@@ -418,6 +450,18 @@ func (s FileDataStore) Set(ctx context.Context, name string, value []byte) error
 
 func (s FileDataStore) Get(ctx context.Context, name string) ([]byte, error) {
 	return ioutil.ReadFile("./data/" + name)
+}
+
+func (s FileDataStore) Has(ctx context.Context, name string) (bool, error) {
+	_, err := os.Stat("./data/" + name)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		} else {
+			return false, err
+		}
+	}
+	return true, nil
 }
 
 type CloudDataStore struct {
@@ -442,4 +486,17 @@ func (s CloudDataStore) Get(ctx context.Context, name string) ([]byte, error) {
 		return nil, err
 	}
 	return body, nil
+}
+
+func (s CloudDataStore) Has(ctx context.Context, name string) (bool, error) {
+	// TODO: return size
+	_, err := s.client.Bucket(bucketName).Object(name).Attrs(ctx)
+	if err != nil {
+		if err == storage.ErrObjectNotExist {
+			return false, nil
+		} else {
+			return false, err
+		}
+	}
+	return true, nil
 }
