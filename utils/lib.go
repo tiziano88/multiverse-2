@@ -1,48 +1,32 @@
 package utils
 
 import (
-	"log"
-
 	"github.com/ipfs/go-cid"
 	format "github.com/ipfs/go-ipld-format"
 	"github.com/ipfs/go-merkledag"
-	mh "github.com/multiformats/go-multihash"
 )
 
-func HashRaw(data []byte) cid.Cid {
-	// Create a cid manually by specifying the 'prefix' parameters
-	// https://github.com/ipfs/go-cid
-	pref := cid.Prefix{
-		Version:  1,
-		Codec:    cid.Raw,
-		MhType:   mh.SHA2_256,
-		MhLength: -1, // default length
-	}
-	c, err := pref.Sum(data)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return c
+func NewProtoNode() *merkledag.ProtoNode {
+	node := merkledag.ProtoNode{}
+	node.SetCidBuilder(merkledag.V1CidPrefix())
+	return &node
 }
 
-func HashCodec(codec uint64, data []byte) cid.Cid {
-	// Create a cid manually by specifying the 'prefix' parameters
-	// https://github.com/ipfs/go-cid
-	pref := cid.Prefix{
-		Version:  1,
-		Codec:    codec,
-		MhType:   mh.SHA2_256,
-		MhLength: -1, // default length
-	}
-	c, err := pref.Sum(data)
+func ParseProtoNode(b []byte) (*merkledag.ProtoNode, error) {
+	node, err := merkledag.DecodeProtobuf(b)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
-	return c
+	node.SetCidBuilder(merkledag.V1CidPrefix())
+	return node, nil
 }
 
-func HashNode(node *merkledag.ProtoNode) cid.Cid {
-	return node.Cid()
+func ParseRawNode(b []byte) (*merkledag.RawNode, error) {
+	node, err := merkledag.NewRawNodeWPrefix(b, merkledag.V1CidPrefix())
+	if err != nil {
+		return nil, err
+	}
+	return node, nil
 }
 
 func GetLink(node *merkledag.ProtoNode, name string) (cid.Cid, error) {

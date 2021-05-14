@@ -3,9 +3,9 @@
 {{ with .node }}
 <div>
     <ul>
-    <li><a href="{{ $parent }}">..</a></li>
+    <li><a href="{{ $parent }}"><code>..</code></a></li>
     {{ range .Links }}
-        <li><a href="{{ $current }}{{ .Name }}">{{ with .Name }}{{ . }}{{ else }}EMPTY{{ end }}</a></li>
+        <li><a href="{{ $current }}{{ .Name }}"><code>{{ .Cid }} {{ .Name }}{{ if eq .Cid.Prefix.Codec 0x70 }}/{{ end }}</code></a></li>
     {{ end }}
     </ul>
 </div>

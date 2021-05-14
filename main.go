@@ -17,7 +17,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/ipfs/go-cid"
 	format "github.com/ipfs/go-ipld-format"
-	"github.com/ipfs/go-merkledag"
 	"github.com/tiziano88/multiverse/utils"
 	"google.golang.org/appengine"
 )
@@ -111,7 +110,29 @@ func uploadHandler(c *gin.Context) {
 			c.AbortWithStatus(http.StatusInternalServerError)
 			return
 		}
-		hash := addCodec(c, uint64(codecParsed), bytes)
+
+		var node format.Node
+		if codecParsed == cid.Raw {
+			node, err = utils.ParseRawNode(bytes)
+			if err != nil {
+				log.Print(err)
+				c.AbortWithStatus(http.StatusBadRequest)
+				return
+			}
+		} else if codecParsed == cid.DagProtobuf {
+			node, err = utils.ParseProtoNode(bytes)
+			if err != nil {
+				log.Print(err)
+				c.AbortWithStatus(http.StatusBadRequest)
+				return
+			}
+		}
+		if node == nil {
+			log.Print("invalid cid")
+			c.AbortWithStatus(http.StatusBadRequest)
+			return
+		}
+		hash := add(c, node)
 		// c.Redirect(http.StatusFound, fmt.Sprintf("//%s%s", hash, webSuffix))
 		log.Printf("uploaded: %s", hash)
 		c.String(http.StatusOK, hash.String())
@@ -130,7 +151,7 @@ func uploadHandler(c *gin.Context) {
 		segments = append(segments, dirName)
 
 		// Empty node.
-		hash, err = traverseAdd(c, hash, segments, cid.DagProtobuf, []byte{})
+		hash, err = traverseAdd(c, hash, segments, utils.NewProtoNode())
 		if err != nil {
 			log.Print(err)
 			c.AbortWithStatus(http.StatusNotFound)
@@ -154,7 +175,13 @@ func uploadHandler(c *gin.Context) {
 		segments := strings.Split(pathString, "/")
 		segments = append(segments, file.Filename)
 
-		hash, err = traverseAdd(c, hash, segments, cid.Raw, b)
+		node, err := utils.ParseRawNode(b)
+		if err != nil {
+			log.Print(err)
+			c.AbortWithStatus(http.StatusNotFound)
+			return
+		}
+		hash, err = traverseAdd(c, hash, segments, node)
 		if err != nil {
 			log.Print(err)
 			c.AbortWithStatus(http.StatusNotFound)
@@ -167,25 +194,13 @@ func uploadHandler(c *gin.Context) {
 	c.Redirect(http.StatusFound, targetURL)
 }
 
-func addCodec(c context.Context, codec uint64, blob []byte) cid.Cid {
-	h := utils.HashCodec(codec, blob)
-	err := dataStore.Set(c, h.String(), blob)
+func add(c context.Context, node format.Node) cid.Cid {
+	h := node.Cid()
+	err := dataStore.Set(c, h.String(), node.RawData())
 	if err != nil {
 		log.Fatal(err)
 	}
 	return h
-}
-
-func addRaw(c context.Context, blob []byte) cid.Cid {
-	return addCodec(c, cid.Raw, blob)
-}
-
-func addNode(c context.Context, node *merkledag.ProtoNode) cid.Cid {
-	b, err := node.Marshal()
-	if err != nil {
-		log.Fatal(err)
-	}
-	return addCodec(c, cid.DagProtobuf, b)
 }
 
 func get(c context.Context, hash string) ([]byte, error) {
@@ -200,7 +215,7 @@ func traverse(c context.Context, base cid.Cid, segments []string) (cid.Cid, erro
 		if err != nil {
 			return cid.Undef, fmt.Errorf("could not get blob %s", base)
 		}
-		node, err := merkledag.DecodeProtobuf(bytes)
+		node, err := utils.ParseProtoNode(bytes)
 		if err != nil {
 			return cid.Undef, fmt.Errorf("could not parse blob %s as node", base)
 		}
@@ -213,7 +228,7 @@ func traverse(c context.Context, base cid.Cid, segments []string) (cid.Cid, erro
 	}
 }
 
-func traverseAdd(c context.Context, base cid.Cid, segments []string, codec uint64, blob []byte) (cid.Cid, error) {
+func traverseAdd(c context.Context, base cid.Cid, segments []string, nodeToAdd format.Node) (cid.Cid, error) {
 	log.Printf("base: %v", base)
 	log.Printf("segments: %#v", segments)
 
@@ -221,7 +236,7 @@ func traverseAdd(c context.Context, base cid.Cid, segments []string, codec uint6
 	if err != nil {
 		return cid.Undef, fmt.Errorf("could not get blob %s", base)
 	}
-	node, err := merkledag.DecodeProtobuf(bytes)
+	node, err := utils.ParseProtoNode(bytes)
 	if err != nil {
 		return cid.Undef, fmt.Errorf("could not parse blob %s as manifest: %v", base, err)
 	}
@@ -229,17 +244,19 @@ func traverseAdd(c context.Context, base cid.Cid, segments []string, codec uint6
 	head := segments[0]
 
 	if head == "" {
-		return traverseAdd(c, base, segments[1:], codec, blob)
+		return traverseAdd(c, base, segments[1:], nodeToAdd)
 	}
 
 	if len(segments) == 1 {
-		log.Printf("adding raw link")
-		newHash := addCodec(c, codec, blob)
-		log.Printf("pre: %v", node.Cid())
+		log.Printf("adding raw link %s", head)
+		newHash := add(c, nodeToAdd)
+		log.Printf("added node %v with hash %s", nodeToAdd, newHash)
+		log.Printf("pre: %#v", node.Cid())
 		err = node.AddRawLink(head, &format.Link{
 			Cid: newHash,
 		})
-		log.Printf("post: %v", node.Cid())
+		log.Printf("post: %#v", node.Cid())
+		log.Printf("links: %#v", node.Links())
 		if err != nil {
 			return cid.Undef, fmt.Errorf("could not add link: %v", err)
 		}
@@ -250,7 +267,7 @@ func traverseAdd(c context.Context, base cid.Cid, segments []string, codec uint6
 		}
 		log.Printf("next: %v", next)
 
-		newHash, err := traverseAdd(c, next, segments[1:], codec, blob)
+		newHash, err := traverseAdd(c, next, segments[1:], nodeToAdd)
 		if err != nil {
 			return cid.Undef, fmt.Errorf("could not call recursively: %v", err)
 		}
@@ -261,7 +278,7 @@ func traverseAdd(c context.Context, base cid.Cid, segments []string, codec uint6
 		}
 	}
 
-	return addNode(c, node), nil
+	return add(c, node), nil
 }
 
 func hashHandler(c *gin.Context) {
@@ -305,9 +322,9 @@ func renderHandler(c *gin.Context) {
 		baseDomain := strings.TrimSuffix(host, webSuffix)
 		log.Printf("base domain: %s", baseDomain)
 		if baseDomain == "empty" {
-			target := addNode(c, &merkledag.ProtoNode{})
+			target := add(c, utils.NewProtoNode())
 			log.Printf("target: %s", target.String())
-			c.Redirect(http.StatusFound, fmt.Sprintf("//%s%s", target, webSuffix))
+			c.Redirect(http.StatusFound, fmt.Sprintf("//%s%s", target.String(), webSuffix))
 			return
 		}
 
@@ -373,7 +390,7 @@ func renderHandler(c *gin.Context) {
 		c.Data(http.StatusOK, "", blob)
 		return
 	} else if target.Prefix().Codec == cid.DagProtobuf {
-		node, err := merkledag.DecodeProtobuf(blob)
+		node, err := utils.ParseProtoNode(blob)
 		if err != nil {
 			log.Printf("could not parse manifest: %v", err)
 			c.Header("multiverse-hash", target.String())
@@ -419,7 +436,13 @@ func proxyHandler(c *gin.Context) {
 		c.Abort()
 		return
 	}
-	h := addRaw(c, blob)
+	node, err := utils.ParseRawNode(blob)
+	if err != nil {
+		log.Print(err)
+		c.Abort()
+		return
+	}
+	h := add(c, node)
 	log.Printf("%s -> %s", target, h)
 	c.String(http.StatusOK, "%s", h)
 }

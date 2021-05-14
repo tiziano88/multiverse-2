@@ -30,7 +30,11 @@ func main() {
 }
 
 func uploadRaw(b []byte) (cid.Cid, error) {
-	localHash := utils.HashRaw(b)
+	node, err := utils.ParseRawNode(b)
+	if err != nil {
+		return cid.Undef, fmt.Errorf("could not create raw node: %v", err)
+	}
+	localHash := node.Cid()
 	if !exists(localHash) {
 		res, err := http.Post("http://"+apiURL+"/upload", "", bytes.NewReader(b))
 		if err != nil {
@@ -51,7 +55,7 @@ func uploadRaw(b []byte) (cid.Cid, error) {
 }
 
 func uploadNode(node *merkledag.ProtoNode) (cid.Cid, error) {
-	localHash := utils.HashNode(node)
+	localHash := node.Cid()
 	if !exists(localHash) {
 		b, err := node.Marshal()
 		if err != nil {
@@ -97,21 +101,21 @@ func traverse(p string) cid.Cid {
 		log.Fatal(err)
 	}
 
-	node := merkledag.ProtoNode{}
+	node := utils.NewProtoNode()
 
 	for _, file := range files {
 		if file.IsDir() {
 			hash := traverse(path.Join(p, file.Name()))
 			fmt.Printf("%s %s\n", hash, file.Name())
-			utils.SetLink(&node, file.Name(), hash)
+			utils.SetLink(node, file.Name(), hash)
 		} else {
 			hash := hashFile(path.Join(p, file.Name()))
 			fmt.Printf("%s %s\n", hash, file.Name())
-			utils.SetLink(&node, file.Name(), hash)
+			utils.SetLink(node, file.Name(), hash)
 		}
 	}
 
-	hash, err := uploadNode(&node)
+	hash, err := uploadNode(node)
 	if err != nil {
 		log.Fatal(err)
 	}
