@@ -61,21 +61,20 @@ func indexHandler(c *gin.Context) {
 	c.HTML(http.StatusOK, "index.tmpl", gin.H{})
 }
 
-func swHandler(c *gin.Context) {
-	c.File("./templates/render_sw.js")
-}
-
-func snapshotSwHandler(c *gin.Context) {
-	c.File("./templates/snapshot_sw.js")
+func parsePath(p string) []string {
+	if p == "/" || p == "" {
+		return []string{}
+	} else {
+		return strings.Split(strings.TrimPrefix(p, "/"), "/")
+	}
 }
 
 func uploadHandler(c *gin.Context) {
 	host := c.Request.Host
+	log.Printf("host: %v", host)
 	pathString := c.Param("path")
 	log.Printf("path: %v", pathString)
-	pathString = strings.TrimPrefix(pathString, "/")
-	segments := strings.Split(pathString, "/")
-	log.Printf("host: %v", host)
+	segments := parsePath(pathString)
 	log.Printf("segments: %#v", segments)
 
 	hash := cid.Undef
@@ -139,19 +138,13 @@ func uploadHandler(c *gin.Context) {
 		return
 	}
 
-	// See https://github.com/gin-gonic/gin#upload-files .
-	form, err := c.MultipartForm()
-	if err != nil {
-		log.Print(err)
-	}
-
 	if dirName, _ := c.GetPostForm("dir"); dirName != "" {
-		log.Printf("creating empty dir: %s", dirName)
-		segments := strings.Split(pathString, "/")
-		segments = append(segments, dirName)
+		segmentsLocal := segments
+		segmentsLocal = append(segmentsLocal, dirName)
+		log.Printf("creating empty dir: %s -> %v", dirName, segmentsLocal)
 
 		// Empty node.
-		hash, err = traverseAdd(c, hash, segments, utils.NewProtoNode())
+		hash, err = traverseAdd(c, hash, segmentsLocal, utils.NewProtoNode())
 		if err != nil {
 			log.Print(err)
 			c.AbortWithStatus(http.StatusNotFound)
@@ -161,6 +154,11 @@ func uploadHandler(c *gin.Context) {
 		return
 	}
 
+	// See https://github.com/gin-gonic/gin#upload-files .
+	form, err := c.MultipartForm()
+	if err != nil {
+		log.Print(err)
+	}
 	for _, file := range form.File["file"] {
 		log.Printf("processing file %s (%dB)", file.Filename, file.Size)
 		mpFile, err := file.Open()
@@ -172,8 +170,8 @@ func uploadHandler(c *gin.Context) {
 			log.Fatal(err)
 		}
 
-		segments := strings.Split(pathString, "/")
-		segments = append(segments, file.Filename)
+		segmentsLocal := segments
+		segmentsLocal = append(segments, file.Filename)
 
 		node, err := utils.ParseRawNode(b)
 		if err != nil {
@@ -181,7 +179,7 @@ func uploadHandler(c *gin.Context) {
 			c.AbortWithStatus(http.StatusNotFound)
 			return
 		}
-		hash, err = traverseAdd(c, hash, segments, node)
+		hash, err = traverseAdd(c, hash, segmentsLocal, node)
 		if err != nil {
 			log.Print(err)
 			c.AbortWithStatus(http.StatusNotFound)
@@ -229,8 +227,7 @@ func traverse(c context.Context, base cid.Cid, segments []string) (cid.Cid, erro
 }
 
 func traverseAdd(c context.Context, base cid.Cid, segments []string, nodeToAdd format.Node) (cid.Cid, error) {
-	log.Printf("base: %v", base)
-	log.Printf("segments: %#v", segments)
+	log.Printf("traverseAdd %v/%v", base, segments)
 
 	bytes, err := get(c, base.String())
 	if err != nil {
@@ -243,23 +240,19 @@ func traverseAdd(c context.Context, base cid.Cid, segments []string, nodeToAdd f
 
 	head := segments[0]
 
-	if head == "" {
-		return traverseAdd(c, base, segments[1:], nodeToAdd)
-	}
-
 	if len(segments) == 1 {
 		log.Printf("adding raw link %s", head)
 		newHash := add(c, nodeToAdd)
-		log.Printf("added node %v with hash %s", nodeToAdd, newHash)
-		log.Printf("pre: %#v", node.Cid())
+		log.Printf("added node %v", nodeToAdd)
+		log.Printf("pre: %v", node.Cid())
 		err = node.AddRawLink(head, &format.Link{
 			Cid: newHash,
 		})
-		log.Printf("post: %#v", node.Cid())
-		log.Printf("links: %#v", node.Links())
+		log.Printf("links: %#v", node.Tree("", 1))
 		if err != nil {
 			return cid.Undef, fmt.Errorf("could not add link: %v", err)
 		}
+		log.Printf("post: %v", node.Cid())
 	} else {
 		next, err := utils.GetLink(node, head)
 		if err != nil {
@@ -294,11 +287,10 @@ func hashHandler(c *gin.Context) {
 
 func renderHandler(c *gin.Context) {
 	host := c.Request.Host
+	log.Printf("host: %v", host)
 	pathString := c.Param("path")
 	log.Printf("path: %v", pathString)
-	pathString = strings.TrimPrefix(pathString, "/")
-	segments := strings.Split(pathString, "/")
-	log.Printf("host: %v", host)
+	segments := parsePath(pathString)
 	log.Printf("segments: %#v", segments)
 
 	base := cid.Undef
