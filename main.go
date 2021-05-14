@@ -139,7 +139,7 @@ func uploadHandler(c *gin.Context) {
 	}
 
 	if dirName, _ := c.GetPostForm("dir"); dirName != "" {
-		segmentsLocal := segments
+		segmentsLocal := parsePath(pathString)
 		segmentsLocal = append(segmentsLocal, dirName)
 		log.Printf("creating empty dir: %s -> %v", dirName, segmentsLocal)
 
@@ -170,8 +170,8 @@ func uploadHandler(c *gin.Context) {
 			log.Fatal(err)
 		}
 
-		segmentsLocal := segments
-		segmentsLocal = append(segments, file.Filename)
+		segmentsLocal := parsePath(pathString)
+		segmentsLocal = append(segmentsLocal, file.Filename)
 
 		node, err := utils.ParseRawNode(b)
 		if err != nil {
@@ -245,13 +245,11 @@ func traverseAdd(c context.Context, base cid.Cid, segments []string, nodeToAdd f
 		newHash := add(c, nodeToAdd)
 		log.Printf("added node %v", nodeToAdd)
 		log.Printf("pre: %v", node.Cid())
-		err = node.AddRawLink(head, &format.Link{
-			Cid: newHash,
-		})
-		log.Printf("links: %#v", node.Tree("", 1))
+		err = utils.SetLink(node, head, newHash)
 		if err != nil {
 			return cid.Undef, fmt.Errorf("could not add link: %v", err)
 		}
+		log.Printf("links: %#v", node.Tree("", 1))
 		log.Printf("post: %v", node.Cid())
 	} else {
 		next, err := utils.GetLink(node, head)

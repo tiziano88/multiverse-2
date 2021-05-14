@@ -38,12 +38,7 @@ func GetLink(node *merkledag.ProtoNode, name string) (cid.Cid, error) {
 }
 
 func SetLink(node *merkledag.ProtoNode, name string, hash cid.Cid) error {
-	for _, l := range node.GetPBNode().Links {
-		if l.GetName() == name {
-			l.Hash = hash.Bytes()
-			return nil
-		}
-	}
+	node.RemoveNodeLink(name) // Ignore errors
 	return node.AddRawLink(name, &format.Link{
 		Cid: hash,
 	})
