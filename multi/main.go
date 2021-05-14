@@ -11,7 +11,7 @@ import (
 	"strconv"
 
 	"github.com/ipfs/go-cid"
-	"github.com/ipfs/go-merkledag"
+	format "github.com/ipfs/go-ipld-format"
 	"github.com/tiziano88/multiverse/utils"
 )
 
@@ -29,39 +29,11 @@ func main() {
 	log.Printf("http://%s.%s", hash, webURL)
 }
 
-func uploadRaw(b []byte) (cid.Cid, error) {
-	node, err := utils.ParseRawNode(b)
-	if err != nil {
-		return cid.Undef, fmt.Errorf("could not create raw node: %v", err)
-	}
+func upload(node format.Node) (cid.Cid, error) {
 	localHash := node.Cid()
 	if !exists(localHash) {
-		res, err := http.Post("http://"+apiURL+"/upload", "", bytes.NewReader(b))
-		if err != nil {
-			return cid.Undef, fmt.Errorf("could not POST request: %v", err)
-		}
-		body, err := ioutil.ReadAll(res.Body)
-		if err != nil {
-			return cid.Undef, fmt.Errorf("could not read response body: %v", err)
-		}
-		log.Printf("uploaded: %s", string(body))
-		remoteHash := string(body)
-		if localHash.String() != remoteHash {
-			return cid.Undef, fmt.Errorf("hash mismatch; local: %s, remote: %s", localHash, remoteHash)
-		}
-		log.Printf("http://%s.%s", localHash, webURL)
-	}
-	return localHash, nil
-}
-
-func uploadNode(node *merkledag.ProtoNode) (cid.Cid, error) {
-	localHash := node.Cid()
-	if !exists(localHash) {
-		b, err := node.Marshal()
-		if err != nil {
-			return cid.Undef, fmt.Errorf("could not marshal node: %v", err)
-		}
-		res, err := http.Post("http://"+apiURL+"/upload?codec="+strconv.Itoa(cid.DagProtobuf), "", bytes.NewReader(b))
+		b := node.RawData()
+		res, err := http.Post("http://"+apiURL+"/upload?codec="+strconv.Itoa(int(localHash.Prefix().Codec)), "", bytes.NewReader(b))
 		if err != nil {
 			return cid.Undef, fmt.Errorf("could not POST request: %v", err)
 		}
@@ -109,28 +81,30 @@ func traverse(p string) cid.Cid {
 			fmt.Printf("%s %s\n", hash, file.Name())
 			utils.SetLink(node, file.Name(), hash)
 		} else {
-			hash := hashFile(path.Join(p, file.Name()))
+			filePath := path.Join(p, file.Name())
+			bytes, err := ioutil.ReadFile(filePath)
+			if err != nil {
+				log.Fatal(err)
+			}
+			newNode, err := utils.ParseRawNode(bytes)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			hash, err := upload(newNode)
+			if err != nil {
+				log.Fatal(err)
+			}
+
 			fmt.Printf("%s %s\n", hash, file.Name())
-			utils.SetLink(node, file.Name(), hash)
+			utils.SetLink(node, file.Name(), newNode.Cid())
 		}
 	}
 
-	hash, err := uploadNode(node)
+	hash, err := upload(node)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	return hash
-}
-
-func hashFile(p string) cid.Cid {
-	bytes, err := ioutil.ReadFile(p)
-	if err != nil {
-		log.Fatal(err)
-	}
-	hash, err := uploadRaw(bytes)
-	if err != nil {
-		log.Fatal(err)
-	}
 	return hash
 }
