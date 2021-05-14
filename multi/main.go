@@ -11,7 +11,7 @@ import (
 	"strconv"
 
 	"github.com/ipfs/go-cid"
-	merkledag_pb "github.com/ipfs/go-merkledag/pb"
+	"github.com/ipfs/go-merkledag"
 	"github.com/tiziano88/multiverse/utils"
 )
 
@@ -19,7 +19,7 @@ import (
 
 const apiURL = "localhost:8080"
 
-const webURL = "web." + apiURL
+const webURL = "www." + apiURL
 
 func main() {
 	flag.Parse()
@@ -50,7 +50,7 @@ func uploadRaw(b []byte) (cid.Cid, error) {
 	return localHash, nil
 }
 
-func uploadNode(node *merkledag_pb.PBNode) (cid.Cid, error) {
+func uploadNode(node *merkledag.ProtoNode) (cid.Cid, error) {
 	localHash := utils.HashNode(node)
 	if !exists(localHash) {
 		b, err := node.Marshal()
@@ -97,7 +97,7 @@ func traverse(p string) cid.Cid {
 		log.Fatal(err)
 	}
 
-	node := merkledag_pb.PBNode{}
+	node := merkledag.ProtoNode{}
 
 	for _, file := range files {
 		if file.IsDir() {

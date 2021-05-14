@@ -15,9 +15,9 @@ import (
 
 	"cloud.google.com/go/storage"
 	"github.com/gin-gonic/gin"
-	proto "github.com/gogo/protobuf/proto"
 	"github.com/ipfs/go-cid"
-	merkledag_pb "github.com/ipfs/go-merkledag/pb"
+	format "github.com/ipfs/go-ipld-format"
+	"github.com/ipfs/go-merkledag"
 	"github.com/tiziano88/multiverse/utils"
 	"google.golang.org/appengine"
 )
@@ -26,7 +26,7 @@ var dataStore DataStore
 
 const bucketName = "multiverse-312721.appspot.com"
 
-var webSuffix = ".web.localhost:8080"
+var webSuffix = ".www.localhost:8080"
 
 const cidDir = 0x88
 
@@ -180,7 +180,7 @@ func addRaw(c context.Context, blob []byte) cid.Cid {
 	return addCodec(c, cid.Raw, blob)
 }
 
-func addNode(c context.Context, node *merkledag_pb.PBNode) cid.Cid {
+func addNode(c context.Context, node *merkledag.ProtoNode) cid.Cid {
 	b, err := node.Marshal()
 	if err != nil {
 		log.Fatal(err)
@@ -200,13 +200,12 @@ func traverse(c context.Context, base cid.Cid, segments []string) (cid.Cid, erro
 		if err != nil {
 			return cid.Undef, fmt.Errorf("could not get blob %s", base)
 		}
-		node := merkledag_pb.PBNode{}
-		err = node.Unmarshal(bytes)
+		node, err := merkledag.DecodeProtobuf(bytes)
 		if err != nil {
 			return cid.Undef, fmt.Errorf("could not parse blob %s as node", base)
 		}
 		head := segments[0]
-		next, err := utils.GetLink(&node, head)
+		next, err := utils.GetLink(node, head)
 		if err != nil {
 			return cid.Undef, fmt.Errorf("could not traverse %s/%s: %v", base, head, err)
 		}
@@ -218,12 +217,11 @@ func traverseAdd(c context.Context, base cid.Cid, segments []string, codec uint6
 	log.Printf("base: %v", base)
 	log.Printf("segments: %#v", segments)
 
-	node := merkledag_pb.PBNode{}
 	bytes, err := get(c, base.String())
 	if err != nil {
 		return cid.Undef, fmt.Errorf("could not get blob %s", base)
 	}
-	err = node.Unmarshal(bytes)
+	node, err := merkledag.DecodeProtobuf(bytes)
 	if err != nil {
 		return cid.Undef, fmt.Errorf("could not parse blob %s as manifest: %v", base, err)
 	}
@@ -235,13 +233,21 @@ func traverseAdd(c context.Context, base cid.Cid, segments []string, codec uint6
 	}
 
 	if len(segments) == 1 {
+		log.Printf("adding raw link")
 		newHash := addCodec(c, codec, blob)
-		node.Links = append(node.Links, &merkledag_pb.PBLink{
-			Name: proto.String(head),
-			Hash: newHash.Bytes(),
+		log.Printf("pre: %v", node.Cid())
+		err = node.AddRawLink(head, &format.Link{
+			Cid: newHash,
 		})
+		log.Printf("post: %v", node.Cid())
+		if err != nil {
+			return cid.Undef, fmt.Errorf("could not add link: %v", err)
+		}
 	} else {
-		next, err := utils.GetLink(&node, head)
+		next, err := utils.GetLink(node, head)
+		if err != nil {
+			return cid.Undef, fmt.Errorf("could not get link: %v", err)
+		}
 		log.Printf("next: %v", next)
 
 		newHash, err := traverseAdd(c, next, segments[1:], codec, blob)
@@ -249,10 +255,13 @@ func traverseAdd(c context.Context, base cid.Cid, segments []string, codec uint6
 			return cid.Undef, fmt.Errorf("could not call recursively: %v", err)
 		}
 
-		utils.SetLink(&node, head, newHash)
+		err = utils.SetLink(node, head, newHash)
+		if err != nil {
+			return cid.Undef, fmt.Errorf("could not add link: %v", err)
+		}
 	}
 
-	return addNode(c, &node), nil
+	return addNode(c, node), nil
 }
 
 func hashHandler(c *gin.Context) {
@@ -294,8 +303,10 @@ func renderHandler(c *gin.Context) {
 
 	if strings.HasSuffix(host, webSuffix) {
 		baseDomain := strings.TrimSuffix(host, webSuffix)
+		log.Printf("base domain: %s", baseDomain)
 		if baseDomain == "empty" {
-			target := addNode(c, &merkledag_pb.PBNode{})
+			target := addNode(c, &merkledag.ProtoNode{})
+			log.Printf("target: %s", target.String())
 			c.Redirect(http.StatusFound, fmt.Sprintf("//%s%s", target, webSuffix))
 			return
 		}
@@ -362,8 +373,7 @@ func renderHandler(c *gin.Context) {
 		c.Data(http.StatusOK, "", blob)
 		return
 	} else if target.Prefix().Codec == cid.DagProtobuf {
-		node := merkledag_pb.PBNode{}
-		err = node.Unmarshal(blob)
+		node, err := merkledag.DecodeProtobuf(blob)
 		if err != nil {
 			log.Printf("could not parse manifest: %v", err)
 			c.Header("multiverse-hash", target.String())
@@ -388,7 +398,7 @@ func renderHandler(c *gin.Context) {
 			"current": current,
 		})
 	} else {
-		log.Print("unknown codec: %v", target.Prefix().Codec)
+		log.Printf("unknown codec: %v", target.Prefix().Codec)
 		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
