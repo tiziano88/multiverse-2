@@ -144,7 +144,32 @@ func uploadHandler(c *gin.Context) {
 		log.Printf("creating empty dir: %s -> %v", dirName, segmentsLocal)
 
 		// Empty node.
-		hash, err = traverseAdd(c, hash, segmentsLocal, utils.NewProtoNode())
+		newHash := add(c, utils.NewProtoNode())
+		hash, err = traverseAdd(c, hash, segmentsLocal, newHash)
+		if err != nil {
+			log.Print(err)
+			c.AbortWithStatus(http.StatusNotFound)
+			return
+		}
+		c.Redirect(http.StatusFound, fmt.Sprintf("//%s%s%s", hash, webSuffix, c.Param("path")))
+		return
+	}
+
+	if linkName, _ := c.GetPostForm("link_name"); linkName != "" {
+		linkHashString, _ := c.GetPostForm("link_hash")
+		linkHash, err := cid.Decode(linkHashString)
+		if err != nil {
+			log.Print(err)
+			c.AbortWithStatus(http.StatusBadRequest)
+			return
+		}
+
+		segmentsLocal := parsePath(pathString)
+		segmentsLocal = append(segmentsLocal, linkName)
+		log.Printf("creating link: %s/%v -> %s", linkName, segmentsLocal, linkHash)
+
+		// Target node.
+		hash, err = traverseAdd(c, hash, segmentsLocal, linkHash)
 		if err != nil {
 			log.Print(err)
 			c.AbortWithStatus(http.StatusNotFound)
@@ -179,7 +204,9 @@ func uploadHandler(c *gin.Context) {
 			c.AbortWithStatus(http.StatusNotFound)
 			return
 		}
-		hash, err = traverseAdd(c, hash, segmentsLocal, node)
+
+		newHash := add(c, node)
+		hash, err = traverseAdd(c, hash, segmentsLocal, newHash)
 		if err != nil {
 			log.Print(err)
 			c.AbortWithStatus(http.StatusNotFound)
@@ -226,7 +253,7 @@ func traverse(c context.Context, base cid.Cid, segments []string) (cid.Cid, erro
 	}
 }
 
-func traverseAdd(c context.Context, base cid.Cid, segments []string, nodeToAdd format.Node) (cid.Cid, error) {
+func traverseAdd(c context.Context, base cid.Cid, segments []string, nodeToAdd cid.Cid) (cid.Cid, error) {
 	log.Printf("traverseAdd %v/%v", base, segments)
 
 	bytes, err := get(c, base.String())
@@ -242,10 +269,8 @@ func traverseAdd(c context.Context, base cid.Cid, segments []string, nodeToAdd f
 
 	if len(segments) == 1 {
 		log.Printf("adding raw link %s", head)
-		newHash := add(c, nodeToAdd)
-		log.Printf("added node %v", nodeToAdd)
 		log.Printf("pre: %v", node.Cid())
-		err = utils.SetLink(node, head, newHash)
+		err = utils.SetLink(node, head, nodeToAdd)
 		if err != nil {
 			return cid.Undef, fmt.Errorf("could not add link: %v", err)
 		}
