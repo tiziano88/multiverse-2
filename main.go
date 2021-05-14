@@ -21,7 +21,7 @@ import (
 	"google.golang.org/appengine"
 )
 
-var dataStore DataStore
+var blobStore DataStore
 
 const bucketName = "multiverse-312721.appspot.com"
 
@@ -40,10 +40,13 @@ func main() {
 	storageClient, err := storage.NewClient(ctx)
 	if err != nil {
 		log.Print(err)
-		dataStore = FileDataStore{}
+		blobStore = FileDataStore{
+			dirName: "data",
+		}
 	} else {
-		dataStore = CloudDataStore{
-			client: storageClient,
+		blobStore = CloudDataStore{
+			client:     storageClient,
+			bucketName: bucketName,
 		}
 	}
 
@@ -221,7 +224,7 @@ func uploadHandler(c *gin.Context) {
 
 func add(c context.Context, node format.Node) cid.Cid {
 	h := node.Cid()
-	err := dataStore.Set(c, h.String(), node.RawData())
+	err := blobStore.Set(c, h.String(), node.RawData())
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -229,7 +232,7 @@ func add(c context.Context, node format.Node) cid.Cid {
 }
 
 func get(c context.Context, hash string) ([]byte, error) {
-	return dataStore.Get(c, hash)
+	return blobStore.Get(c, hash)
 }
 
 func traverse(c context.Context, base cid.Cid, segments []string) (cid.Cid, error) {
@@ -299,7 +302,7 @@ func traverseAdd(c context.Context, base cid.Cid, segments []string, nodeToAdd c
 
 func hashHandler(c *gin.Context) {
 	hash := c.Param("hash")
-	b, err := dataStore.Get(c, hash)
+	b, err := blobStore.Get(c, hash)
 	if err != nil {
 		log.Print(err)
 		c.Abort()
@@ -373,7 +376,7 @@ func renderHandler(c *gin.Context) {
 	log.Printf("target CID: %#v", target.Prefix())
 
 	if c.Query("stat") != "" {
-		ok, err := dataStore.Has(c, target.String())
+		ok, err := blobStore.Has(c, target.String())
 		if err != nil {
 			log.Print(err)
 			c.AbortWithStatus(http.StatusInternalServerError)
@@ -482,69 +485,4 @@ func snapshotHandler(c *gin.Context) {
 	c.HTML(http.StatusOK, "snapshot.tmpl", gin.H{
 		"target": target,
 	})
-}
-
-type DataStore interface {
-	Set(ctx context.Context, name string, value []byte) error
-	Get(ctx context.Context, name string) ([]byte, error)
-	Has(ctx context.Context, name string) (bool, error)
-}
-
-type FileDataStore struct{}
-
-func (s FileDataStore) Set(ctx context.Context, name string, value []byte) error {
-	return ioutil.WriteFile("./data/"+name, value, 0644)
-}
-
-func (s FileDataStore) Get(ctx context.Context, name string) ([]byte, error) {
-	return ioutil.ReadFile("./data/" + name)
-}
-
-func (s FileDataStore) Has(ctx context.Context, name string) (bool, error) {
-	_, err := os.Stat("./data/" + name)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return false, nil
-		} else {
-			return false, err
-		}
-	}
-	return true, nil
-}
-
-type CloudDataStore struct {
-	client *storage.Client
-}
-
-func (s CloudDataStore) Set(ctx context.Context, name string, value []byte) error {
-	wc := s.client.Bucket(bucketName).Object(name).NewWriter(ctx)
-	defer wc.Close()
-	_, err := wc.Write(value)
-	return err
-}
-
-func (s CloudDataStore) Get(ctx context.Context, name string) ([]byte, error) {
-	rc, err := s.client.Bucket(bucketName).Object(name).NewReader(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer rc.Close()
-	body, err := ioutil.ReadAll(rc)
-	if err != nil {
-		return nil, err
-	}
-	return body, nil
-}
-
-func (s CloudDataStore) Has(ctx context.Context, name string) (bool, error) {
-	// TODO: return size
-	_, err := s.client.Bucket(bucketName).Object(name).Attrs(ctx)
-	if err != nil {
-		if err == storage.ErrObjectNotExist {
-			return false, nil
-		} else {
-			return false, err
-		}
-	}
-	return true, nil
 }
