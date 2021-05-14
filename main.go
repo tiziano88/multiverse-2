@@ -21,20 +21,36 @@ import (
 	"google.golang.org/appengine"
 )
 
-var blobStore DataStore
+var (
+	blobStore DataStore
+	tagStore  DataStore
+)
 
-const bucketName = "multiverse-312721.appspot.com"
+const blobBucketName = "multiverse-312721.appspot.com"
+const tagBucketName = "multiverse-312721-key"
 
-var webSuffix = ".www.localhost:8080"
+const wwwSegment = "www"
+const tagSegment = "tag"
 
-const cidDir = 0x88
+var domainName = "localhost:8080"
+
+func hostSegments(c *gin.Context) []string {
+	host := c.Request.Host
+	host = strings.TrimSuffix(host, domainName)
+	host = strings.TrimSuffix(host, ".")
+	return strings.Split(host, ".")
+}
+
+func redirectToCid(c *gin.Context, target cid.Cid, path string) {
+	c.Redirect(http.StatusFound, fmt.Sprintf("//%s.%s.%s%s", target.String(), wwwSegment, domainName, path))
+}
 
 func main() {
-	webSuffixEnv := os.Getenv("WEB_SUFFIX")
-	if webSuffixEnv != "" {
-		webSuffix = webSuffixEnv
+	domainNameEnv := os.Getenv("DOMAIN_NAME")
+	if domainNameEnv != "" {
+		domainName = domainNameEnv
 	}
-	log.Printf("web suffix: %#v", webSuffix)
+	log.Printf("domain name: %s", domainName)
 
 	ctx := context.Background()
 	storageClient, err := storage.NewClient(ctx)
@@ -43,10 +59,17 @@ func main() {
 		blobStore = FileDataStore{
 			dirName: "data",
 		}
+		tagStore = FileDataStore{
+			dirName: "tags",
+		}
 	} else {
 		blobStore = CloudDataStore{
 			client:     storageClient,
-			bucketName: bucketName,
+			bucketName: blobBucketName,
+		}
+		tagStore = CloudDataStore{
+			client:     storageClient,
+			bucketName: tagBucketName,
 		}
 	}
 
@@ -72,9 +95,89 @@ func parsePath(p string) []string {
 	}
 }
 
+func postTagHandler(c *gin.Context) {
+	segments := parsePath(c.Param("path"))
+	tagName := segments[1]
+	tagValueString, err := ioutil.ReadAll(c.Request.Body)
+	if err != nil {
+		log.Print(err)
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
+	tagValue, err := cid.Decode(string(tagValueString))
+	if err != nil {
+		log.Print(err)
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
+	err = tagStore.Set(c, tagName, []byte(tagValue.String()))
+	if err != nil {
+		log.Print(err)
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
+}
+
+func serveWWW(c *gin.Context, base cid.Cid, segments []string) {
+	target, err := traverse(c, base, segments)
+	if err != nil {
+		log.Print(err)
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	log.Printf("target: %s", target)
+	log.Printf("target CID: %#v", target.Prefix())
+
+	blob, err := get(c, target.String())
+	if err != nil {
+		log.Print(err)
+		c.Abort()
+		return
+	}
+	if target.Prefix().Codec == cid.Raw {
+		c.Header("multiverse-hash", target.String())
+		ext := filepath.Ext(segments[len(segments)-1])
+		contentType := mime.TypeByExtension(ext)
+		if contentType == "" {
+			contentType = http.DetectContentType(blob)
+		}
+		c.Header("Content-Type", contentType)
+		c.Data(http.StatusOK, "", blob)
+		return
+	} else if target.Prefix().Codec == cid.DagProtobuf {
+		node, err := utils.ParseProtoNode(blob)
+		if err != nil {
+			log.Printf("could not parse manifest: %v", err)
+			c.Header("multiverse-hash", target.String())
+			ext := filepath.Ext(segments[len(segments)-1])
+			contentType := mime.TypeByExtension(ext)
+			if contentType == "" {
+				contentType = http.DetectContentType(blob)
+			}
+			c.Header("Content-Type", contentType)
+			c.Data(http.StatusOK, "", blob)
+			return
+		}
+		current := c.Param("path")
+		if !strings.HasSuffix(current, "/") {
+			current += "/"
+		}
+		c.HTML(http.StatusOK, "render.tmpl", gin.H{
+			"hash":    target,
+			"node":    node,
+			"parent":  path.Dir(path.Dir(current)),
+			"current": current,
+		})
+	} else {
+		log.Printf("unknown codec: %v", target.Prefix().Codec)
+		c.AbortWithStatus(http.StatusBadRequest)
+		return
+	}
+}
+
 func uploadHandler(c *gin.Context) {
-	host := c.Request.Host
-	log.Printf("host: %v", host)
+	hostSegments := hostSegments(c)
+	log.Printf("host segments: %v", hostSegments)
 	pathString := c.Param("path")
 	log.Printf("path: %v", pathString)
 	segments := parsePath(pathString)
@@ -82,8 +185,8 @@ func uploadHandler(c *gin.Context) {
 
 	hash := cid.Undef
 	var err error
-	if strings.HasSuffix(host, webSuffix) {
-		hash, err = cid.Decode(strings.TrimSuffix(host, webSuffix))
+	if len(hostSegments) == 2 && hostSegments[1] == wwwSegment {
+		hash, err = cid.Decode(hostSegments[0])
 		if err != nil {
 			log.Print(err)
 			c.AbortWithStatus(http.StatusInternalServerError)
@@ -154,7 +257,7 @@ func uploadHandler(c *gin.Context) {
 			c.AbortWithStatus(http.StatusNotFound)
 			return
 		}
-		c.Redirect(http.StatusFound, fmt.Sprintf("//%s%s%s", hash, webSuffix, c.Param("path")))
+		redirectToCid(c, hash, c.Param("path"))
 		return
 	}
 
@@ -178,7 +281,7 @@ func uploadHandler(c *gin.Context) {
 			c.AbortWithStatus(http.StatusNotFound)
 			return
 		}
-		c.Redirect(http.StatusFound, fmt.Sprintf("//%s%s%s", hash, webSuffix, c.Param("path")))
+		redirectToCid(c, hash, c.Param("path"))
 		return
 	}
 
@@ -217,9 +320,7 @@ func uploadHandler(c *gin.Context) {
 		}
 	}
 
-	targetURL := fmt.Sprintf("http://%s%s%s", hash, webSuffix, c.Param("path"))
-	// c.String(http.StatusOK, "%s", targetURL)
-	c.Redirect(http.StatusFound, targetURL)
+	redirectToCid(c, hash, c.Param("path"))
 }
 
 func add(c context.Context, node format.Node) cid.Cid {
@@ -312,8 +413,8 @@ func hashHandler(c *gin.Context) {
 }
 
 func renderHandler(c *gin.Context) {
-	host := c.Request.Host
-	log.Printf("host: %v", host)
+	hostSegments := hostSegments(c)
+	log.Printf("host segments: %v", hostSegments)
 	pathString := c.Param("path")
 	log.Printf("path: %v", pathString)
 	segments := parsePath(pathString)
@@ -336,23 +437,45 @@ func renderHandler(c *gin.Context) {
 		}
 	*/
 
-	if strings.HasSuffix(host, webSuffix) {
-		baseDomain := strings.TrimSuffix(host, webSuffix)
-		log.Printf("base domain: %s", baseDomain)
-		if baseDomain == "empty" {
-			target := add(c, utils.NewProtoNode())
-			log.Printf("target: %s", target.String())
-			c.Redirect(http.StatusFound, fmt.Sprintf("//%s%s", target.String(), webSuffix))
-			return
-		}
+	if len(hostSegments) == 2 {
+		switch hostSegments[1] {
+		case wwwSegment:
+			baseDomain := hostSegments[0]
+			log.Printf("base domain: %s", baseDomain)
+			if baseDomain == "empty" {
+				target := add(c, utils.NewProtoNode())
+				log.Printf("target: %s", target.String())
+				redirectToCid(c, target, "")
+				return
+			}
 
-		base, err = cid.Decode(baseDomain)
-		if err != nil {
-			log.Print(err)
-			c.AbortWithStatus(http.StatusNotFound)
+			base, err = cid.Decode(baseDomain)
+			if err != nil {
+				log.Print(err)
+				c.AbortWithStatus(http.StatusNotFound)
+				return
+			}
+			log.Printf("base: %v", base)
+		case tagSegment:
+			tagValueBytes, err := tagStore.Get(c, hostSegments[0])
+			if err != nil {
+				log.Print(err)
+				c.AbortWithStatus(http.StatusInternalServerError)
+				return
+			}
+			tagValue, err := cid.Decode(string(tagValueBytes))
+			if err != nil {
+				log.Print(err)
+				c.AbortWithStatus(http.StatusInternalServerError)
+				return
+			}
+			serveWWW(c, tagValue, segments)
+			return
+		default:
+			log.Printf("invalid segment")
+			c.AbortWithStatus(http.StatusBadRequest)
 			return
 		}
-		log.Printf("base: %v", base)
 	}
 
 	if len(segments) >= 2 && segments[0] == "blobs" {
@@ -391,52 +514,7 @@ func renderHandler(c *gin.Context) {
 		}
 	}
 
-	blob, err := get(c, target.String())
-	if err != nil {
-		log.Print(err)
-		c.Abort()
-		return
-	}
-	if target.Prefix().Codec == cid.Raw {
-		c.Header("multiverse-hash", target.String())
-		ext := filepath.Ext(pathString)
-		contentType := mime.TypeByExtension(ext)
-		if contentType == "" {
-			contentType = http.DetectContentType(blob)
-		}
-		c.Header("Content-Type", contentType)
-		c.Data(http.StatusOK, "", blob)
-		return
-	} else if target.Prefix().Codec == cid.DagProtobuf {
-		node, err := utils.ParseProtoNode(blob)
-		if err != nil {
-			log.Printf("could not parse manifest: %v", err)
-			c.Header("multiverse-hash", target.String())
-			ext := filepath.Ext(pathString)
-			contentType := mime.TypeByExtension(ext)
-			if contentType == "" {
-				contentType = http.DetectContentType(blob)
-			}
-			c.Header("Content-Type", contentType)
-			c.Data(http.StatusOK, "", blob)
-			return
-		}
-		current := c.Param("path")
-		if !strings.HasSuffix(current, "/") {
-			current += "/"
-		}
-		c.HTML(http.StatusOK, "render.tmpl", gin.H{
-			"hash":    target,
-			"path":    segments,
-			"node":    node,
-			"parent":  path.Dir(path.Dir(current)),
-			"current": current,
-		})
-	} else {
-		log.Printf("unknown codec: %v", target.Prefix().Codec)
-		c.AbortWithStatus(http.StatusBadRequest)
-		return
-	}
+	serveWWW(c, base, segments)
 }
 
 func proxyHandler(c *gin.Context) {
