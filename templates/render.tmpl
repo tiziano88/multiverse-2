@@ -44,6 +44,15 @@
 </div>
 {{ end }}
 
+<div class="bg-white shadow-lg rounded-lg max-w-md py-4 px-8 my-2 border">
+	<form action="?" method="post" >
+		<h2 class="text-lg">Bind tag</h2>
+		name <input type="text" id="dir" name="tag_name" class="w-full border-2 rounded">
+		hash <input type="text" id="dir" name="tag_value" class="w-full border-2 rounded" value="{{.hash}}">
+		<input type="submit" class="bg-blue-500 hover:bg-blue-700 text-white py-2 px-4 rounded">
+	</form>
+</div>
+
 <pre>
 {{ .blob }}
 </pre>

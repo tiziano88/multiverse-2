@@ -185,15 +185,7 @@ func uploadHandler(c *gin.Context) {
 
 	hash := cid.Undef
 	var err error
-	if len(hostSegments) == 2 && hostSegments[1] == wwwSegment {
-		hash, err = cid.Decode(hostSegments[0])
-		if err != nil {
-			log.Print(err)
-			c.AbortWithStatus(http.StatusInternalServerError)
-			return
-		}
-		log.Printf("hash: %v", hash)
-	} else {
+	if len(hostSegments) == 0 {
 		log.Print("straight upload")
 		codec := c.Query("codec")
 		log.Printf("codec: %v", codec)
@@ -244,6 +236,16 @@ func uploadHandler(c *gin.Context) {
 		return
 	}
 
+	if len(hostSegments) == 2 && hostSegments[1] == wwwSegment {
+		hash, err = cid.Decode(hostSegments[0])
+		if err != nil {
+			log.Print(err)
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+		log.Printf("hash: %v", hash)
+	}
+
 	if dirName, _ := c.GetPostForm("dir"); dirName != "" {
 		segmentsLocal := parsePath(pathString)
 		segmentsLocal = append(segmentsLocal, dirName)
@@ -282,6 +284,26 @@ func uploadHandler(c *gin.Context) {
 			return
 		}
 		redirectToCid(c, hash, c.Param("path"))
+		return
+	}
+
+	if tagName, _ := c.GetPostForm("tag_name"); tagName != "" {
+		tagValueString, _ := c.GetPostForm("tag_value")
+		log.Printf("setting tag %s -> %s", tagName, tagValueString)
+		tagValue, err := cid.Decode(tagValueString)
+		if err != nil {
+			log.Print(err)
+			c.AbortWithStatus(http.StatusBadRequest)
+			return
+		}
+
+		err = tagStore.Set(c, tagName, []byte(tagValue.String()))
+		if err != nil {
+			log.Print(err)
+			c.AbortWithStatus(http.StatusNotFound)
+			return
+		}
+		c.Redirect(http.StatusFound, fmt.Sprintf("//%s.%s.%s", tagName, tagSegment, domainName))
 		return
 	}
 
