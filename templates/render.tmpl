@@ -4,13 +4,20 @@
 {{ $current := .current }}
 {{ $parent := .parent }}
 {{ with .node }}
-<div>
-    <ul class="list-disc list-inside">
-    <li><a href="{{ $parent }}" class="text-blue-500 underline"><code>..</code></a></li>
+
+<div class="divide-y divide-blue-500 border border-blue-500 rounded-lg">
+	<div class="p-2">Files</div>
+	<a href="{{ $parent }}" class="block p-2 hover:bg-blue-200 font-mono flex">
+		<div class="px-2">/</div>
+		<div class="px-2 flex-1">..</div>
+	</a>
     {{ range .Links }}
-        <li><code>{{ .Cid }}</code> <a class="text-blue-500 underline" href="{{ $current }}{{ .Name }}"><code>{{ .Name }}{{ if eq .Cid.Prefix.Codec 0x70 }}/{{ end }}</code></a></li>
-    {{ end }}
-    </ul>
+	<a href="{{ $current }}{{ .Name }}" class="block p-2 hover:bg-blue-200 font-mono flex">
+		<div class="px-2">{{ if eq .Cid.Prefix.Codec 0x70 }}/{{ else }}f{{ end }}</div>
+		<div class="px-2 flex-1">{{ .Name }}</div>
+		<div class="px-2 bg-yellow-100 border border-yellow-200 rounded-lg">{{ .Cid }}</div>
+	</a>
+	{{ end }}
 </div>
 
 <div class="bg-white shadow-lg rounded-lg max-w-md py-4 px-8 my-2 border">
