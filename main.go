@@ -118,6 +118,51 @@ func postTagHandler(c *gin.Context) {
 	}
 }
 
+func serveUI(c *gin.Context, base cid.Cid, segments []string, target cid.Cid, blob []byte) {
+	switch target.Prefix().Codec {
+	case cid.DagProtobuf:
+		node, err := utils.ParseProtoNode(blob)
+		if err != nil {
+			log.Printf("could not parse manifest: %v", err)
+			c.Header("multiverse-hash", target.String())
+			ext := filepath.Ext(segments[len(segments)-1])
+			contentType := mime.TypeByExtension(ext)
+			if contentType == "" {
+				contentType = http.DetectContentType(blob)
+			}
+			c.Header("Content-Type", contentType)
+			c.Data(http.StatusOK, "", blob)
+			return
+		}
+		current := c.Param("path")
+		if !strings.HasSuffix(current, "/") {
+			current += "/"
+		}
+		c.HTML(http.StatusOK, "render.tmpl", gin.H{
+			"base":     base,
+			"segments": segments,
+			"hash":     target,
+			"node":     node,
+			"parent":   path.Dir(path.Dir(current)),
+			"current":  current,
+		})
+	case cid.Raw:
+		current := c.Param("path")
+		if !strings.HasSuffix(current, "/") {
+			current += "/"
+		}
+		c.HTML(http.StatusOK, "render.tmpl", gin.H{
+			"base":     base,
+			"segments": segments,
+			"hash":     target,
+			"parent":   path.Dir(path.Dir(current)),
+			"current":  current,
+			"blob":     blob,
+			"blob_str": string(blob),
+		})
+	}
+}
+
 func serveWWW(c *gin.Context, base cid.Cid, segments []string) {
 	target, err := traverse(c, base, segments)
 	if err != nil {
@@ -145,29 +190,7 @@ func serveWWW(c *gin.Context, base cid.Cid, segments []string) {
 		c.Data(http.StatusOK, "", blob)
 		return
 	} else if target.Prefix().Codec == cid.DagProtobuf {
-		node, err := utils.ParseProtoNode(blob)
-		if err != nil {
-			log.Printf("could not parse manifest: %v", err)
-			c.Header("multiverse-hash", target.String())
-			ext := filepath.Ext(segments[len(segments)-1])
-			contentType := mime.TypeByExtension(ext)
-			if contentType == "" {
-				contentType = http.DetectContentType(blob)
-			}
-			c.Header("Content-Type", contentType)
-			c.Data(http.StatusOK, "", blob)
-			return
-		}
-		current := c.Param("path")
-		if !strings.HasSuffix(current, "/") {
-			current += "/"
-		}
-		c.HTML(http.StatusOK, "render.tmpl", gin.H{
-			"hash":    target,
-			"node":    node,
-			"parent":  path.Dir(path.Dir(current)),
-			"current": current,
-		})
+		serveUI(c, base, segments, target, blob)
 	} else {
 		log.Printf("unknown codec: %v", target.Prefix().Codec)
 		c.AbortWithStatus(http.StatusBadRequest)
@@ -458,6 +481,28 @@ func renderHandler(c *gin.Context) {
 			return
 		}
 	*/
+
+	if len(hostSegments) == 1 && hostSegments[0] == "" {
+		base, err = cid.Decode(segments[0])
+		if err != nil {
+			log.Print(err)
+			c.AbortWithStatus(http.StatusNotFound)
+			return
+		}
+		target, err := traverse(c, base, segments[1:])
+		if err != nil {
+			log.Print(err)
+			c.AbortWithStatus(http.StatusNotFound)
+			return
+		}
+		blob, err := get(c, target.String())
+		if err != nil {
+			log.Print(err)
+			c.Abort()
+			return
+		}
+		serveUI(c, base, segments[1:], target, blob)
+	}
 
 	if len(hostSegments) == 2 {
 		switch hostSegments[1] {

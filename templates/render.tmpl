@@ -3,15 +3,22 @@
 <body class="p-10">
 {{ $current := .current }}
 {{ $parent := .parent }}
-{{ with .node }}
+{{ $base := .base }}
+
+{{ if .node }}
 
 <div class="divide-y divide-blue-500 border border-blue-500 rounded-lg">
-	<div class="p-2">Files</div>
+	<div class="p-2 flex">
+		<div class="px-2 bg-yellow-100 border border-yellow-200 rounded-lg w-min">{{ .base }}</div>
+		{{ range .segments }}
+		<div>/{{ . }}</div>
+		{{ end }}
+	</div>
 	<a href="{{ $parent }}" class="block p-2 hover:bg-blue-200 font-mono flex">
 		<div class="px-2">/</div>
 		<div class="px-2 flex-1">..</div>
 	</a>
-    {{ range .Links }}
+    {{ range .node.Links }}
 	<a href="{{ $current }}{{ .Name }}" class="block p-2 hover:bg-blue-200 font-mono flex">
 		<div class="px-2">{{ if eq .Cid.Prefix.Codec 0x70 }}/{{ else }}f{{ end }}</div>
 		<div class="px-2 flex-1">{{ .Name }}</div>
@@ -51,6 +58,18 @@
 </div>
 {{ end }}
 
+{{ if .blob_str }}
+<div class="divide-y divide-blue-500 border border-blue-500 rounded-lg">
+	<div class="p-2 flex">
+		<div class="px-2 bg-yellow-100 border border-yellow-200 rounded-lg w-min">{{ .base }}</div>
+		{{ range .segments }}
+		<div>/{{ . }}</div>
+		{{ end }}
+	</div>
+	<div class="font-mono whitespace-pre">{{ .blob_str }}</div>
+</div>
+{{ end }}
+
 <div class="bg-white shadow-lg rounded-lg max-w-md py-4 px-8 my-2 border">
 	<form action="?" method="post" >
 		<h2 class="text-lg">Bind tag</h2>
@@ -59,9 +78,5 @@
 		<input type="submit" class="bg-blue-500 hover:bg-blue-700 text-white py-2 px-4 rounded">
 	</form>
 </div>
-
-<pre>
-{{ .blob }}
-</pre>
 
 </body>
