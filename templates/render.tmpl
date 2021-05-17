@@ -5,15 +5,31 @@
 {{ $parent := .parent }}
 {{ $base := .base }}
 
-{{ if .node }}
-
 <div class="divide-y divide-blue-500 border border-blue-500 rounded-lg">
 	<div class="p-2 flex">
 		<div class="px-2 bg-yellow-100 border border-yellow-200 rounded-lg w-min">{{ .base }}</div>
 		{{ range .segments }}
-		<div>/{{ . }}</div>
+		<div><div class="inline px-1">/</div><a class="underline" href="{{ .FullPath }}">{{ .Name }}</a></div>
 		{{ end }}
 	</div>
+	{{ if .blob_str }}
+	<button
+	  class="bg-blue-500 hover:bg-blue-700 text-white py-2 px-4 rounded"
+	  id="save_button"
+	  disabled="true"
+	  onclick="save()">
+	    Save & Branch
+	</button>
+    {{ end }}
+	{{ if .node }}
+	<input type="file" id="file_input" multiple style="display: none;" onchange="fileInputChange()">
+	<button
+	  class="bg-blue-500 hover:bg-blue-700 text-white py-2 px-4 rounded"
+	  id="upload_files_button"
+	  onclick="upload_files()">
+	    Upload files & Branch
+	</button>
+	{{ end }}
 	<a href="{{ $parent }}" class="block p-2 hover:bg-blue-200 font-mono flex">
 		<div class="px-2">/</div>
 		<div class="px-2 flex-1">..</div>
@@ -25,7 +41,21 @@
 		<div class="px-2 bg-yellow-100 border border-yellow-200 rounded-lg">{{ .Cid }}</div>
 	</a>
 	{{ end }}
+	{{ if .blob_str }}
+	<div class="font-mono whitespace-pre" contenteditable="true" id="blob" oninput="file_change()">{{ .blob_str }}</div>
+    {{ end }}
 </div>
+
+<div class="bg-white shadow-lg rounded-lg max-w-md py-4 px-8 my-2 border">
+	<form action="?" method="post" >
+		<h2 class="text-lg">Bind tag</h2>
+		name <input type="text" id="dir" name="tag_name" class="w-full border-2 rounded">
+		hash <input type="text" id="dir" name="tag_value" class="w-full border-2 rounded" value="{{.hash}}">
+		<input type="submit" class="bg-blue-500 hover:bg-blue-700 text-white py-2 px-4 rounded">
+	</form>
+</div>
+
+{{ if .node }}
 
 <div class="bg-white shadow-lg rounded-lg max-w-md py-4 px-8 my-2 border">
 	<form action="?" method="post" enctype="multipart/form-data">
@@ -58,25 +88,49 @@
 </div>
 {{ end }}
 
-{{ if .blob_str }}
-<div class="divide-y divide-blue-500 border border-blue-500 rounded-lg">
-	<div class="p-2 flex">
-		<div class="px-2 bg-yellow-100 border border-yellow-200 rounded-lg w-min">{{ .base }}</div>
-		{{ range .segments }}
-		<div>/{{ . }}</div>
-		{{ end }}
-	</div>
-	<div class="font-mono whitespace-pre">{{ .blob_str }}</div>
-</div>
-{{ end }}
 
-<div class="bg-white shadow-lg rounded-lg max-w-md py-4 px-8 my-2 border">
-	<form action="?" method="post" >
-		<h2 class="text-lg">Bind tag</h2>
-		name <input type="text" id="dir" name="tag_name" class="w-full border-2 rounded">
-		hash <input type="text" id="dir" name="tag_value" class="w-full border-2 rounded" value="{{.hash}}">
-		<input type="submit" class="bg-blue-500 hover:bg-blue-700 text-white py-2 px-4 rounded">
-	</form>
-</div>
+<script>
+function file_change() {
+	const blob = document.getElementById('blob');
+	const save = document.getElementById('save_button');
+	save.disabled = false;
+
+	console.log("change" );
+}
+
+async function upload_files() {
+	const fileSelect = document.getElementById('file_input');
+	fileSelect.click();
+}
+
+async function fileInputChange() {
+	const fileSelect = document.getElementById('file_input');
+	for (f of fileSelect.files) {
+		const reader = new FileReader();
+		reader.readAsBinaryString(f);
+		reader.addEventListener('load', (e) => {
+			console.log(e.target.result);
+		})
+		console.log(f, reader.result);
+	}
+}
+
+async function save() {
+	const blob = document.getElementById('blob');
+	const save = document.getElementById('save_button');
+	console.log("save & branch", blob.innerText);
+	const response = await fetch("/api/update", {
+		method: "POST",
+		body: JSON.stringify({
+			type: "file",
+			path: "{{ .fullPath }}",
+			content: btoa(blob.innerText),
+		})
+	});
+	const responseJson = await response.json();
+	console.log(responseJson);
+	window.location = responseJson.RedirectURL;
+}
+</script>
 
 </body>

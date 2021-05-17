@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -38,7 +39,12 @@ func hostSegments(c *gin.Context) []string {
 	host := c.Request.Host
 	host = strings.TrimSuffix(host, domainName)
 	host = strings.TrimSuffix(host, ".")
-	return strings.Split(host, ".")
+	hostSegments := strings.Split(host, ".")
+	if len(hostSegments) > 0 && hostSegments[0] == "" {
+		return hostSegments[1:]
+	} else {
+		return hostSegments
+	}
 }
 
 func redirectToCid(c *gin.Context, target cid.Cid, path string) {
@@ -95,6 +101,14 @@ func parsePath(p string) []string {
 	}
 }
 
+func parseHost(p string) []string {
+	if p == "/" || p == "" {
+		return []string{}
+	} else {
+		return strings.Split(strings.TrimPrefix(p, "/"), "/")
+	}
+}
+
 func postTagHandler(c *gin.Context) {
 	segments := parsePath(c.Param("path"))
 	tagName := segments[1]
@@ -119,6 +133,15 @@ func postTagHandler(c *gin.Context) {
 }
 
 func serveUI(c *gin.Context, base cid.Cid, segments []string, target cid.Cid, blob []byte) {
+	fullPath := []string{base.String()}
+	fullPath = append(fullPath, segments...)
+	templateSegments := []TemplateSegment{}
+	for i, s := range segments {
+		templateSegments = append(templateSegments, TemplateSegment{
+			Name:     s,
+			FullPath: "/" + base.String() + "/" + path.Join(segments[0:i+1]...),
+		})
+	}
 	switch target.Prefix().Codec {
 	case cid.DagProtobuf:
 		node, err := utils.ParseProtoNode(blob)
@@ -140,7 +163,8 @@ func serveUI(c *gin.Context, base cid.Cid, segments []string, target cid.Cid, bl
 		}
 		c.HTML(http.StatusOK, "render.tmpl", gin.H{
 			"base":     base,
-			"segments": segments,
+			"segments": templateSegments,
+			"fullPath": path.Join(fullPath...),
 			"hash":     target,
 			"node":     node,
 			"parent":   path.Dir(path.Dir(current)),
@@ -153,7 +177,8 @@ func serveUI(c *gin.Context, base cid.Cid, segments []string, target cid.Cid, bl
 		}
 		c.HTML(http.StatusOK, "render.tmpl", gin.H{
 			"base":     base,
-			"segments": segments,
+			"segments": templateSegments,
+			"fullPath": path.Join(fullPath...),
 			"hash":     target,
 			"parent":   path.Dir(path.Dir(current)),
 			"current":  current,
@@ -161,6 +186,11 @@ func serveUI(c *gin.Context, base cid.Cid, segments []string, target cid.Cid, bl
 			"blob_str": string(blob),
 		})
 	}
+}
+
+type TemplateSegment struct {
+	Name     string
+	FullPath string
 }
 
 func serveWWW(c *gin.Context, base cid.Cid, segments []string) {
@@ -198,9 +228,25 @@ func serveWWW(c *gin.Context, base cid.Cid, segments []string) {
 	}
 }
 
+type UploadRequest struct {
+	Type    string // file | dir
+	Path    string
+	Content []byte
+}
+
+type UploadResponse struct {
+	RedirectURL string
+}
+
+// base, pathSegments
+func parseFullPath(p string) (string, []string) {
+	segments := strings.Split(p, "/")
+	return segments[0], segments[1:]
+}
+
 func uploadHandler(c *gin.Context) {
 	hostSegments := hostSegments(c)
-	log.Printf("host segments: %v", hostSegments)
+	log.Printf("host segments: %#v", hostSegments)
 	pathString := c.Param("path")
 	log.Printf("path: %v", pathString)
 	segments := parsePath(pathString)
@@ -209,6 +255,39 @@ func uploadHandler(c *gin.Context) {
 	hash := cid.Undef
 	var err error
 	if len(hostSegments) == 0 {
+		switch segments[0] {
+		case "api":
+			switch segments[1] {
+			case "update":
+				var u UploadRequest
+				json.NewDecoder(c.Request.Body).Decode(&u)
+				log.Printf("upload: %v", u)
+				baseString, pathSegments := parseFullPath(u.Path)
+				base, err := cid.Decode(baseString)
+				if err != nil {
+					log.Print(err)
+					c.AbortWithStatus(http.StatusNotFound)
+					return
+				}
+				newNode, err := utils.ParseRawNode(u.Content)
+				if err != nil {
+					log.Print(err)
+					c.AbortWithStatus(http.StatusNotFound)
+					return
+				}
+				newHash := add(c, newNode)
+				hash, err = traverseAdd(c, base, pathSegments, newHash)
+				if err != nil {
+					log.Print(err)
+					c.AbortWithStatus(http.StatusNotFound)
+					return
+				}
+				c.JSON(http.StatusOK, UploadResponse{
+					RedirectURL: "/" + hash.String() + "/" + path.Join(pathSegments...),
+				})
+				return
+			}
+		}
 		log.Print("straight upload")
 		codec := c.Query("codec")
 		log.Printf("codec: %v", codec)
@@ -482,7 +561,7 @@ func renderHandler(c *gin.Context) {
 		}
 	*/
 
-	if len(hostSegments) == 1 && hostSegments[0] == "" {
+	if len(hostSegments) == 0 {
 		base, err = cid.Decode(segments[0])
 		if err != nil {
 			log.Print(err)
