@@ -229,6 +229,14 @@ func serveWWW(c *gin.Context, base cid.Cid, segments []string) {
 }
 
 type UploadRequest struct {
+	// Base  string
+	// Blobs []UploadBlob
+	Type    string // file | dir
+	Path    string
+	Content []byte
+}
+
+type UploadBlob struct {
 	Type    string // file | dir
 	Path    string
 	Content []byte
