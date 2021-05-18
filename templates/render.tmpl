@@ -2,7 +2,6 @@
 
 <body class="p-10">
 {{ $current := .current }}
-{{ $parent := .parent }}
 {{ $base := .base }}
 
 <div class="divide-y divide-blue-500 border border-blue-500 rounded-lg">
@@ -13,27 +12,29 @@
 		{{ range .segments }}
 		<div>
 			<div class="inline px-1">/</div>
-			<a class="underline" href="{{ .FullPath }}">{{ .Name }}</a>
+			<a class="underline" href="/{{ $base }}/{{ .Path }}">{{ .Name }}</a>
 		</div>
 		{{ end }}
 	</div>
 	<div class="flex">
-		{{ if .blob_str }}
+		{{ if eq .type "file" }}
 		<button
 		class="bg-blue-500 hover:bg-blue-700 text-white py-2 px-4 rounded"
 		id="save_button"
 		disabled="true"
+		title="save"
 		onclick="save()">
 		<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 			<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16v2a2 2 0 01-2 2H5a2 2 0 01-2-2v-7a2 2 0 012-2h2m3-4H9a2 2 0 00-2 2v7a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-1m-1 4l-3 3m0 0l-3-3m3 3V3" />
 		</svg>
 		</button>
 		{{ end }}
-		{{ if .node }}
+		{{ if eq .type "directory" }}
 		<input type="file" id="file_input" multiple style="display: none;" onchange="fileInputChange()">
 		<button
 		class="bg-blue-500 hover:bg-blue-700 text-white py-2 px-4 rounded flex"
 		id="upload_files_button"
+		title="upload files"
 		onclick="upload_files()">
 		<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 			<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
@@ -42,7 +43,8 @@
 		<button
 		class="bg-blue-500 hover:bg-blue-700 text-white py-2 px-4 rounded flex"
 		id="upload_files_button"
-		onclick="upload_files()">
+		title="create empty dir"
+		onclick="createEmptyDir()">
 		<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 			<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
 		</svg>
@@ -50,17 +52,27 @@
 		<button
 		class="bg-blue-500 hover:bg-blue-700 text-white py-2 px-4 rounded flex"
 		id="upload_files_button"
-		onclick="upload_files()">
+		title="create empty file"
+		onclick="createEmptyFile()">
 			<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 			<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+			</svg>
+		</button>
+		<button
+		class="bg-blue-500 hover:bg-blue-700 text-white py-2 px-4 rounded flex"
+		id="upload_files_button"
+		title="create empty file"
+		onclick="createEmptyFile()">
+			<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
 			</svg>
 		</button>
 		{{ end }}
 	</div>
 
 	{{ if .segments }}
-	<a href="{{ $parent }}" class="block p-2 hover:bg-blue-200 font-mono flex">
-		<div class="px-2">
+	<a href="{{ .parent }}" class="block p-2 hover:bg-blue-200 font-mono flex">
+		<div class="px-2 text-blue-500">
 			<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
 			</svg>
@@ -73,12 +85,27 @@
     {{ range .node.Links }}
 	{{ if eq .Cid.Prefix.Codec 0x70 }}
 	<a href="{{ $current }}{{ .Name }}" class="block p-2 hover:bg-blue-200 font-mono flex">
-		<div class="px-2">
+		<div class="px-2 text-blue-500" onclick="rename()">
 			<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
 			</svg>
 		</div>
 		<div class="px-2 flex-1">{{ .Name }}</div>
+		<div class="px-2 hover:text-blue-500" title="rename" onclick="renameLink(event, '{{.Name}}')">
+			<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+			</svg>
+		</div>
+		<div class="px-2 hover:text-red-500" title="delete" onclick="deleteLink(event, '{{.Name}}')">
+			<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+			</svg>
+		</div>
+		<div class="px-2 hover:text-blue-500" title="www" onclick="browseLink(event, '{{.Name}}')">
+			<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+			</svg>
+		</div>
 		<div class="px-2 bg-yellow-100 border border-yellow-200 rounded-lg text-xs h-4">{{ .Cid }}</div>
 	</a>
 	{{ end }}
@@ -99,7 +126,7 @@
 	{{ end }}
 	{{ end }}
 
-	{{ if .blob_str }}
+	{{ if eq .type "file" }}
 	<div class="font-mono whitespace-pre" contenteditable="true" id="blob" oninput="file_change()">{{ .blob_str }}</div>
     {{ end }}
 </div>
@@ -173,6 +200,74 @@ async function fileInputChange() {
 	}
 }
 
+async function createEmptyDir() {
+	const name = prompt('New dir name');
+	if (name == null) {
+		return
+	}
+	const response = await fetch("/api/update", {
+		method: "POST",
+		body: JSON.stringify({
+			type: "directory",
+			base: "{{ .base }}",
+			path: "{{ .path }}/" + name,
+			content: "",
+		})
+	});
+	const responseJson = await response.json();
+	console.log(responseJson);
+	window.location = responseJson.RedirectURL;
+}
+
+async function createEmptyFile() {
+	const name = prompt('New file name');
+	if (name == null) {
+		return
+	}
+	const response = await fetch("/api/update", {
+		method: "POST",
+		body: JSON.stringify({
+			type: "file",
+			base: "{{ .base }}",
+			path: "{{ .path }}/" + name,
+			content: "",
+		})
+	});
+	const responseJson = await response.json();
+	console.log(responseJson);
+	window.location = responseJson.RedirectURL;
+}
+
+async function renameLink(e, linkName) {
+	e.preventDefault();
+	console.log(e, linkName);
+	const newName = prompt('New name', linkName);
+	if (newName == null) {
+		return
+	}
+	const response = await fetch("/api/rename", {
+		method: "POST",
+		body: JSON.stringify({
+			base: "{{ .base }}",
+			fromPath: "{{ .path }}/" + linkName,
+			toPath: "{{ .path }}/" + newName,
+		})
+	});
+	const responseJson = await response.json();
+	console.log(responseJson);
+	window.location = responseJson.RedirectURL;
+}
+
+async function deleteLink(e, linkName) {
+	e.preventDefault();
+	console.log(e, linkName);
+}
+
+async function browseLink(e, linkName) {
+	e.preventDefault();
+	console.log(e, linkName);
+}
+
 async function save() {
 	const blob = document.getElementById('blob');
 	const save = document.getElementById('save_button');
@@ -181,7 +276,8 @@ async function save() {
 		method: "POST",
 		body: JSON.stringify({
 			type: "file",
-			path: "{{ .fullPath }}",
+			base: "{{ .base }}",
+			path: "{{ .path }}",
 			content: btoa(blob.innerText),
 		})
 	});

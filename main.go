@@ -133,13 +133,11 @@ func postTagHandler(c *gin.Context) {
 }
 
 func serveUI(c *gin.Context, base cid.Cid, segments []string, target cid.Cid, blob []byte) {
-	fullPath := []string{base.String()}
-	fullPath = append(fullPath, segments...)
 	templateSegments := []TemplateSegment{}
 	for i, s := range segments {
 		templateSegments = append(templateSegments, TemplateSegment{
-			Name:     s,
-			FullPath: "/" + base.String() + "/" + path.Join(segments[0:i+1]...),
+			Name: s,
+			Path: path.Join(segments[0 : i+1]...),
 		})
 	}
 	switch target.Prefix().Codec {
@@ -162,9 +160,10 @@ func serveUI(c *gin.Context, base cid.Cid, segments []string, target cid.Cid, bl
 			current += "/"
 		}
 		c.HTML(http.StatusOK, "render.tmpl", gin.H{
+			"type":     "directory",
 			"base":     base,
+			"path":     path.Join(segments...),
 			"segments": templateSegments,
-			"fullPath": path.Join(fullPath...),
 			"hash":     target,
 			"node":     node,
 			"parent":   path.Dir(path.Dir(current)),
@@ -176,9 +175,10 @@ func serveUI(c *gin.Context, base cid.Cid, segments []string, target cid.Cid, bl
 			current += "/"
 		}
 		c.HTML(http.StatusOK, "render.tmpl", gin.H{
+			"type":     "file",
 			"base":     base,
+			"path":     path.Join(segments...),
 			"segments": templateSegments,
-			"fullPath": path.Join(fullPath...),
 			"hash":     target,
 			"parent":   path.Dir(path.Dir(current)),
 			"current":  current,
@@ -189,8 +189,8 @@ func serveUI(c *gin.Context, base cid.Cid, segments []string, target cid.Cid, bl
 }
 
 type TemplateSegment struct {
-	Name     string
-	FullPath string
+	Name string
+	Path string
 }
 
 func serveWWW(c *gin.Context, base cid.Cid, segments []string) {
@@ -228,10 +228,17 @@ func serveWWW(c *gin.Context, base cid.Cid, segments []string) {
 	}
 }
 
+type RenameRequest struct {
+	Base     string
+	FromPath string
+	ToPath   string
+}
+
 type UploadRequest struct {
 	// Base  string
 	// Blobs []UploadBlob
 	Type    string // file | dir
+	Base    string
 	Path    string
 	Content []byte
 }
@@ -269,17 +276,27 @@ func uploadHandler(c *gin.Context) {
 			case "update":
 				var u UploadRequest
 				json.NewDecoder(c.Request.Body).Decode(&u)
-				log.Printf("upload: %v", u)
-				baseString, pathSegments := parseFullPath(u.Path)
-				base, err := cid.Decode(baseString)
+				log.Printf("upload: %#v", u)
+				pathSegments := strings.Split(u.Path, "/")
+				base, err := cid.Decode(u.Base)
 				if err != nil {
 					log.Print(err)
 					c.AbortWithStatus(http.StatusNotFound)
 					return
 				}
-				newNode, err := utils.ParseRawNode(u.Content)
-				if err != nil {
-					log.Print(err)
+				var newNode format.Node
+				switch u.Type {
+				case "file":
+					newNode, err = utils.ParseRawNode(u.Content)
+					if err != nil {
+						log.Print(err)
+						c.AbortWithStatus(http.StatusNotFound)
+						return
+					}
+				case "directory":
+					newNode = utils.NewProtoNode()
+				default:
+					log.Printf("invalid type: %s", u.Type)
 					c.AbortWithStatus(http.StatusNotFound)
 					return
 				}
@@ -293,6 +310,12 @@ func uploadHandler(c *gin.Context) {
 				c.JSON(http.StatusOK, UploadResponse{
 					RedirectURL: "/" + hash.String() + "/" + path.Join(pathSegments...),
 				})
+				return
+			case "rename":
+				var r RenameRequest
+				json.NewDecoder(c.Request.Body).Decode(&r)
+				log.Printf("rename: %#v", r)
+				// TODO
 				return
 			}
 		}
