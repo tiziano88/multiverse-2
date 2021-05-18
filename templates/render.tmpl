@@ -7,11 +7,14 @@
 
 <div class="divide-y divide-blue-500 border border-blue-500 rounded-lg">
 	<div class="p-2 flex">
-		<div class="px-2 bg-yellow-100 border border-yellow-200 rounded-lg w-min">
-			{{ .base }}
+		<div class="px-2 bg-yellow-100 hover:bg-yellow-300 border border-yellow-200 rounded-lg w-min">
+			<a href="/{{ .base }}">{{ .base }}</a>
 		</div>
 		{{ range .segments }}
-		<div><div class="inline px-1">/</div><a class="underline" href="{{ .FullPath }}">{{ .Name }}</a></div>
+		<div>
+			<div class="inline px-1">/</div>
+			<a class="underline" href="{{ .FullPath }}">{{ .Name }}</a>
+		</div>
 		{{ end }}
 	</div>
 	<div class="flex">
@@ -21,7 +24,9 @@
 		id="save_button"
 		disabled="true"
 		onclick="save()">
-			Save & Branch
+		<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+			<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16v2a2 2 0 01-2 2H5a2 2 0 01-2-2v-7a2 2 0 012-2h2m3-4H9a2 2 0 00-2 2v7a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-1m-1 4l-3 3m0 0l-3-3m3 3V3" />
+		</svg>
 		</button>
 		{{ end }}
 		{{ if .node }}
@@ -52,6 +57,8 @@
 		</button>
 		{{ end }}
 	</div>
+
+	{{ if .segments }}
 	<a href="{{ $parent }}" class="block p-2 hover:bg-blue-200 font-mono flex">
 		<div class="px-2">
 			<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -60,23 +67,38 @@
 		</div>
 		<div class="px-2 flex-1">..</div>
 	</a>
+	{{ end }}
+
+	{{/* dirs */}}
     {{ range .node.Links }}
+	{{ if eq .Cid.Prefix.Codec 0x70 }}
 	<a href="{{ $current }}{{ .Name }}" class="block p-2 hover:bg-blue-200 font-mono flex">
 		<div class="px-2">
-			{{ if eq .Cid.Prefix.Codec 0x70 }}
 			<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
 			</svg>
-			{{ else }}
-			<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-			    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-			</svg>
-			{{ end }}
 		</div>
 		<div class="px-2 flex-1">{{ .Name }}</div>
 		<div class="px-2 bg-yellow-100 border border-yellow-200 rounded-lg text-xs h-4">{{ .Cid }}</div>
 	</a>
 	{{ end }}
+	{{ end }}
+
+	{{/* files */}}
+    {{ range .node.Links }}
+	{{ if ne .Cid.Prefix.Codec 0x70 }}
+	<a href="{{ $current }}{{ .Name }}" class="block p-2 hover:bg-blue-200 font-mono flex">
+		<div class="px-2">
+			<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+			    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+			</svg>
+		</div>
+		<div class="px-2 flex-1">{{ .Name }}</div>
+		<div class="px-2 bg-yellow-100 border border-yellow-200 rounded-lg text-xs h-4">{{ .Cid }}</div>
+	</a>
+	{{ end }}
+	{{ end }}
+
 	{{ if .blob_str }}
 	<div class="font-mono whitespace-pre" contenteditable="true" id="blob" oninput="file_change()">{{ .blob_str }}</div>
     {{ end }}
