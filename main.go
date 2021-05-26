@@ -169,6 +169,7 @@ func serveUI(c *gin.Context, root cid.Cid, segments []string, target cid.Cid, bl
 			"node":     node,
 			"parent":   path.Dir(path.Dir(current)),
 			"current":  current,
+			"wwwHost":  wwwSegment + "." + domainName,
 		})
 	case cid.Raw:
 		current := c.Param("path")
@@ -185,6 +186,7 @@ func serveUI(c *gin.Context, root cid.Cid, segments []string, target cid.Cid, bl
 			"current":  current,
 			"blob":     blob,
 			"blob_str": string(blob),
+			"wwwHost":  wwwSegment + "." + domainName,
 		})
 	}
 }
@@ -548,37 +550,6 @@ func traverseAdd(c context.Context, root cid.Cid, segments []string, nodeToAdd c
 			return cid.Undef, fmt.Errorf("could not add link: %v", err)
 		}
 		return add(c, node), nil
-
-		/*
-			if len(segments) == 1 {
-					log.Printf("adding raw link %s", head)
-					log.Printf("pre: %v", node.Cid())
-					err = utils.SetLink(node, head, nodeToAdd)
-					if err != nil {
-						return cid.Undef, fmt.Errorf("could not add link: %v", err)
-					}
-					log.Printf("links: %#v", node.Tree("", 1))
-					log.Printf("post: %v", node.Cid())
-			} else {
-				next, err := utils.GetLink(node, head)
-				if err != nil {
-					return cid.Undef, fmt.Errorf("could not get link: %v", err)
-				}
-				log.Printf("next: %v", next)
-
-				newHash, err := traverseAdd(c, next, segments[1:], nodeToAdd)
-				if err != nil {
-					return cid.Undef, fmt.Errorf("could not call recursively: %v", err)
-				}
-
-				err = utils.SetLink(node, head, newHash)
-				if err != nil {
-					return cid.Undef, fmt.Errorf("could not add link: %v", err)
-				}
-			}
-
-			return add(c, node), nil
-		*/
 	}
 }
 
