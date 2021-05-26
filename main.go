@@ -18,6 +18,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/ipfs/go-cid"
 	format "github.com/ipfs/go-ipld-format"
+	"github.com/ipfs/go-merkledag"
 	"github.com/tiziano88/multiverse/utils"
 	"google.golang.org/appengine"
 )
@@ -132,7 +133,7 @@ func postTagHandler(c *gin.Context) {
 	}
 }
 
-func serveUI(c *gin.Context, base cid.Cid, segments []string, target cid.Cid, blob []byte) {
+func serveUI(c *gin.Context, root cid.Cid, segments []string, target cid.Cid, blob []byte) {
 	templateSegments := []TemplateSegment{}
 	for i, s := range segments {
 		templateSegments = append(templateSegments, TemplateSegment{
@@ -161,7 +162,7 @@ func serveUI(c *gin.Context, base cid.Cid, segments []string, target cid.Cid, bl
 		}
 		c.HTML(http.StatusOK, "render.tmpl", gin.H{
 			"type":     "directory",
-			"base":     base,
+			"root":     root,
 			"path":     path.Join(segments...),
 			"segments": templateSegments,
 			"hash":     target,
@@ -176,7 +177,7 @@ func serveUI(c *gin.Context, base cid.Cid, segments []string, target cid.Cid, bl
 		}
 		c.HTML(http.StatusOK, "render.tmpl", gin.H{
 			"type":     "file",
-			"base":     base,
+			"root":     root,
 			"path":     path.Join(segments...),
 			"segments": templateSegments,
 			"hash":     target,
@@ -193,8 +194,8 @@ type TemplateSegment struct {
 	Path string
 }
 
-func serveWWW(c *gin.Context, base cid.Cid, segments []string) {
-	target, err := traverse(c, base, segments)
+func serveWWW(c *gin.Context, root cid.Cid, segments []string) {
+	target, err := traverse(c, root, segments)
 	if err != nil {
 		log.Print(err)
 		c.AbortWithStatus(http.StatusNotFound)
@@ -220,7 +221,7 @@ func serveWWW(c *gin.Context, base cid.Cid, segments []string) {
 		c.Data(http.StatusOK, "", blob)
 		return
 	} else if target.Prefix().Codec == cid.DagProtobuf {
-		serveUI(c, base, segments, target, blob)
+		serveUI(c, root, segments, target, blob)
 	} else {
 		log.Printf("unknown codec: %v", target.Prefix().Codec)
 		c.AbortWithStatus(http.StatusBadRequest)
@@ -229,16 +230,16 @@ func serveWWW(c *gin.Context, base cid.Cid, segments []string) {
 }
 
 type RenameRequest struct {
-	Base     string
+	Root     string
 	FromPath string
 	ToPath   string
 }
 
 type UploadRequest struct {
-	// Base  string
+	// Root  string
 	// Blobs []UploadBlob
 	Type    string // file | dir
-	Base    string
+	Root    string
 	Path    string
 	Content []byte
 }
@@ -253,7 +254,7 @@ type UploadResponse struct {
 	RedirectURL string
 }
 
-// base, pathSegments
+// root, pathSegments
 func parseFullPath(p string) (string, []string) {
 	segments := strings.Split(p, "/")
 	return segments[0], segments[1:]
@@ -277,8 +278,8 @@ func uploadHandler(c *gin.Context) {
 				var u UploadRequest
 				json.NewDecoder(c.Request.Body).Decode(&u)
 				log.Printf("upload: %#v", u)
-				pathSegments := strings.Split(u.Path, "/")
-				base, err := cid.Decode(u.Base)
+				pathSegments := parsePath(u.Path)
+				root, err := cid.Decode(u.Root)
 				if err != nil {
 					log.Print(err)
 					c.AbortWithStatus(http.StatusNotFound)
@@ -301,7 +302,7 @@ func uploadHandler(c *gin.Context) {
 					return
 				}
 				newHash := add(c, newNode)
-				hash, err = traverseAdd(c, base, pathSegments, newHash)
+				hash, err = traverseAdd(c, root, pathSegments, newHash)
 				if err != nil {
 					log.Print(err)
 					c.AbortWithStatus(http.StatusNotFound)
@@ -491,53 +492,48 @@ func get(c context.Context, hash string) ([]byte, error) {
 	return blobStore.Get(c, hash)
 }
 
-func traverse(c context.Context, base cid.Cid, segments []string) (cid.Cid, error) {
-	if len(segments) == 0 || segments[0] == "" {
-		return base, nil
+func traverse(c context.Context, root cid.Cid, segments []string) (cid.Cid, error) {
+	if len(segments) == 0 {
+		return root, nil
 	} else {
-		bytes, err := get(c, base.String())
+		bytes, err := get(c, root.String())
 		if err != nil {
-			return cid.Undef, fmt.Errorf("could not get blob %s", base)
+			return cid.Undef, fmt.Errorf("could not get blob %s", root)
 		}
 		node, err := utils.ParseProtoNode(bytes)
 		if err != nil {
-			return cid.Undef, fmt.Errorf("could not parse blob %s as node", base)
+			return cid.Undef, fmt.Errorf("could not parse blob %s as node", root)
 		}
 		head := segments[0]
 		next, err := utils.GetLink(node, head)
 		if err != nil {
-			return cid.Undef, fmt.Errorf("could not traverse %s/%s: %v", base, head, err)
+			return cid.Undef, fmt.Errorf("could not traverse %s/%s: %v", root, head, err)
 		}
+		log.Printf("next: %v", next)
 		return traverse(c, next, segments[1:])
 	}
 }
 
-func traverseAdd(c context.Context, base cid.Cid, segments []string, nodeToAdd cid.Cid) (cid.Cid, error) {
-	log.Printf("traverseAdd %v/%v", base, segments)
-
-	bytes, err := get(c, base.String())
-	if err != nil {
-		return cid.Undef, fmt.Errorf("could not get blob %s", base)
-	}
-	node, err := utils.ParseProtoNode(bytes)
-	if err != nil {
-		return cid.Undef, fmt.Errorf("could not parse blob %s as manifest: %v", base, err)
-	}
-
-	head := segments[0]
-
-	if len(segments) == 1 {
-		log.Printf("adding raw link %s", head)
-		log.Printf("pre: %v", node.Cid())
-		err = utils.SetLink(node, head, nodeToAdd)
-		if err != nil {
-			return cid.Undef, fmt.Errorf("could not add link: %v", err)
-		}
-		log.Printf("links: %#v", node.Tree("", 1))
-		log.Printf("post: %v", node.Cid())
+func traverseAdd(c context.Context, root cid.Cid, segments []string, nodeToAdd cid.Cid) (cid.Cid, error) {
+	log.Printf("traverseAdd %v/%#v", root, segments)
+	if len(segments) == 0 {
+		return nodeToAdd, nil
 	} else {
-		next, err := utils.GetLink(node, head)
+		bytes, err := get(c, root.String())
 		if err != nil {
+			return cid.Undef, fmt.Errorf("could not get blob %s", root)
+		}
+		node, err := utils.ParseProtoNode(bytes)
+		if err != nil {
+			return cid.Undef, fmt.Errorf("could not parse blob %s as manifest: %v", root, err)
+		}
+		head := segments[0]
+		var next cid.Cid
+		next, err = utils.GetLink(node, head)
+		if err == merkledag.ErrLinkNotFound {
+			// Ok
+			next = add(c, utils.NewProtoNode())
+		} else if err != nil {
 			return cid.Undef, fmt.Errorf("could not get link: %v", err)
 		}
 		log.Printf("next: %v", next)
@@ -551,9 +547,39 @@ func traverseAdd(c context.Context, base cid.Cid, segments []string, nodeToAdd c
 		if err != nil {
 			return cid.Undef, fmt.Errorf("could not add link: %v", err)
 		}
-	}
+		return add(c, node), nil
 
-	return add(c, node), nil
+		/*
+			if len(segments) == 1 {
+					log.Printf("adding raw link %s", head)
+					log.Printf("pre: %v", node.Cid())
+					err = utils.SetLink(node, head, nodeToAdd)
+					if err != nil {
+						return cid.Undef, fmt.Errorf("could not add link: %v", err)
+					}
+					log.Printf("links: %#v", node.Tree("", 1))
+					log.Printf("post: %v", node.Cid())
+			} else {
+				next, err := utils.GetLink(node, head)
+				if err != nil {
+					return cid.Undef, fmt.Errorf("could not get link: %v", err)
+				}
+				log.Printf("next: %v", next)
+
+				newHash, err := traverseAdd(c, next, segments[1:], nodeToAdd)
+				if err != nil {
+					return cid.Undef, fmt.Errorf("could not call recursively: %v", err)
+				}
+
+				err = utils.SetLink(node, head, newHash)
+				if err != nil {
+					return cid.Undef, fmt.Errorf("could not add link: %v", err)
+				}
+			}
+
+			return add(c, node), nil
+		*/
+	}
 }
 
 func hashHandler(c *gin.Context) {
@@ -575,31 +601,31 @@ func renderHandler(c *gin.Context) {
 	segments := parsePath(pathString)
 	log.Printf("segments: %#v", segments)
 
-	base := cid.Undef
+	root := cid.Undef
 	var err error
 
 	/*
 		if host == "localhost:8080" {
-			base, err = cid.Decode(segments[0])
+			root, err = cid.Decode(segments[0])
 			if err != nil {
 				log.Print(err)
 				c.AbortWithStatus(http.StatusNotFound)
 				return
 			}
-			log.Printf("base: %v", base)
-			c.Redirect(http.StatusFound, fmt.Sprintf("//%s%s", base, webSuffix))
+			log.Printf("root: %v", root)
+			c.Redirect(http.StatusFound, fmt.Sprintf("//%s%s", root, webSuffix))
 			return
 		}
 	*/
 
 	if len(hostSegments) == 0 {
-		base, err = cid.Decode(segments[0])
+		root, err = cid.Decode(segments[0])
 		if err != nil {
 			log.Print(err)
 			c.AbortWithStatus(http.StatusNotFound)
 			return
 		}
-		target, err := traverse(c, base, segments[1:])
+		target, err := traverse(c, root, segments[1:])
 		if err != nil {
 			log.Print(err)
 			c.AbortWithStatus(http.StatusNotFound)
@@ -611,7 +637,7 @@ func renderHandler(c *gin.Context) {
 			c.Abort()
 			return
 		}
-		serveUI(c, base, segments[1:], target, blob)
+		serveUI(c, root, segments[1:], target, blob)
 	}
 
 	if len(hostSegments) == 2 {
@@ -626,13 +652,13 @@ func renderHandler(c *gin.Context) {
 				return
 			}
 
-			base, err = cid.Decode(baseDomain)
+			root, err = cid.Decode(baseDomain)
 			if err != nil {
 				log.Print(err)
 				c.AbortWithStatus(http.StatusNotFound)
 				return
 			}
-			log.Printf("base: %v", base)
+			log.Printf("root: %v", root)
 		case tagSegment:
 			tagValueBytes, err := tagStore.Get(c, hostSegments[0])
 			if err != nil {
@@ -657,7 +683,7 @@ func renderHandler(c *gin.Context) {
 
 	if len(segments) >= 2 && segments[0] == "blobs" {
 		log.Printf("API get blob")
-		base, err = cid.Decode(segments[1])
+		root, err = cid.Decode(segments[1])
 		if err != nil {
 			log.Print(err)
 			c.AbortWithStatus(http.StatusNotFound)
@@ -666,7 +692,7 @@ func renderHandler(c *gin.Context) {
 		segments = segments[2:]
 	}
 
-	target, err := traverse(c, base, segments)
+	target, err := traverse(c, root, segments)
 	if err != nil {
 		log.Print(err)
 		c.AbortWithStatus(http.StatusNotFound)
@@ -691,7 +717,7 @@ func renderHandler(c *gin.Context) {
 		}
 	}
 
-	serveWWW(c, base, segments)
+	serveWWW(c, root, segments)
 }
 
 func proxyHandler(c *gin.Context) {

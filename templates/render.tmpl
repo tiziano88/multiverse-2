@@ -2,17 +2,17 @@
 
 <body class="p-10">
 {{ $current := .current }}
-{{ $base := .base }}
+{{ $root := .root }}
 
 <div class="divide-y divide-blue-500 border border-blue-500 rounded-lg">
 	<div class="p-2 flex">
 		<div class="px-2 bg-yellow-100 hover:bg-yellow-300 border border-yellow-200 rounded-lg w-min">
-			<a href="/{{ .base }}">{{ .base }}</a>
+			<a href="/{{ .root }}">{{ .root }}</a>
 		</div>
 		{{ range .segments }}
 		<div>
 			<div class="inline px-1">/</div>
-			<a class="underline" href="/{{ $base }}/{{ .Path }}">{{ .Name }}</a>
+			<a class="underline" href="/{{ $root }}/{{ .Path }}">{{ .Name }}</a>
 		</div>
 		{{ end }}
 	</div>
@@ -209,7 +209,7 @@ async function createEmptyDir() {
 		method: "POST",
 		body: JSON.stringify({
 			type: "directory",
-			base: "{{ .base }}",
+			root: "{{ .root }}",
 			path: "{{ .path }}/" + name,
 			content: "",
 		})
@@ -228,7 +228,7 @@ async function createEmptyFile() {
 		method: "POST",
 		body: JSON.stringify({
 			type: "file",
-			base: "{{ .base }}",
+			root: "{{ .root }}",
 			path: "{{ .path }}/" + name,
 			content: "",
 		})
@@ -248,7 +248,7 @@ async function renameLink(e, linkName) {
 	const response = await fetch("/api/rename", {
 		method: "POST",
 		body: JSON.stringify({
-			base: "{{ .base }}",
+			root: "{{ .root }}",
 			fromPath: "{{ .path }}/" + linkName,
 			toPath: "{{ .path }}/" + newName,
 		})
@@ -276,7 +276,7 @@ async function save() {
 		method: "POST",
 		body: JSON.stringify({
 			type: "file",
-			base: "{{ .base }}",
+			root: "{{ .root }}",
 			path: "{{ .path }}",
 			content: btoa(blob.innerText),
 		})
