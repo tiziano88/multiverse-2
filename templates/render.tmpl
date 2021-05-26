@@ -25,7 +25,7 @@
 		title="save"
 		onclick="save()">
 		<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-			<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16v2a2 2 0 01-2 2H5a2 2 0 01-2-2v-7a2 2 0 012-2h2m3-4H9a2 2 0 00-2 2v7a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-1m-1 4l-3 3m0 0l-3-3m3 3V3" />
+			<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
 		</svg>
 		</button>
 		{{ end }}
@@ -146,15 +146,6 @@
     {{ end }}
 </div>
 
-<div class="bg-white shadow-lg rounded-lg max-w-md py-4 px-8 my-2 border">
-	<form action="?" method="post" >
-		<h2 class="text-lg">Bind tag</h2>
-		name <input type="text" id="dir" name="tag_name" class="w-full border-2 rounded">
-		hash <input type="text" id="dir" name="tag_value" class="w-full border-2 rounded" value="{{.hash}}">
-		<input type="submit" class="bg-blue-500 hover:bg-blue-700 text-white py-2 px-4 rounded">
-	</form>
-</div>
-
 {{ if .node }}
 
 <div class="bg-white shadow-lg rounded-lg max-w-md py-4 px-8 my-2 border">
@@ -265,13 +256,21 @@ async function renameLink(e, linkName) {
 }
 
 async function deleteLink(e, linkName) {
-	e.preventDefault();
-	console.log(e, linkName);
+	const response = await fetch("/api/remove", {
+		method: "POST",
+		body: JSON.stringify({
+			root: "{{ .root }}",
+			path: "{{ .path }}/" + linkName,
+		})
+	});
+	const responseJson = await response.json();
+	console.log(responseJson);
+	window.location = responseJson.RedirectURL;
 }
 
 async function browseLink(e, linkName) {
 	e.preventDefault();
-	const url = "http://{{.root}}.{{.wwwHost}}/{{with .path}}{{.}}/{{end}}"+linkName;
+	const url = "http://{{ .root }}.{{ .wwwHost }}/{{ with .path }}{{ . }}/{{ end }}"+linkName;
 	window.open(url);
 }
 

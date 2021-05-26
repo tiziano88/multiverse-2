@@ -237,6 +237,11 @@ type RenameRequest struct {
 	ToPath   string
 }
 
+type RemoveRequest struct {
+	Root string
+	Path string
+}
+
 type UploadRequest struct {
 	// Root  string
 	// Blobs []UploadBlob
@@ -319,6 +324,27 @@ func uploadHandler(c *gin.Context) {
 				json.NewDecoder(c.Request.Body).Decode(&r)
 				log.Printf("rename: %#v", r)
 				// TODO
+				return
+			case "remove":
+				var r RemoveRequest
+				json.NewDecoder(c.Request.Body).Decode(&r)
+				log.Printf("remove: %#v", r)
+				pathSegments := parsePath(r.Path)
+				root, err := cid.Decode(r.Root)
+				if err != nil {
+					log.Print(err)
+					c.AbortWithStatus(http.StatusNotFound)
+					return
+				}
+				hash, err = traverseRemove(c, root, pathSegments)
+				if err != nil {
+					log.Print(err)
+					c.AbortWithStatus(http.StatusNotFound)
+					return
+				}
+				c.JSON(http.StatusOK, UploadResponse{
+					RedirectURL: "/" + hash.String() + "/" + path.Join(pathSegments[:len(pathSegments)-1]...),
+				})
 				return
 			}
 		}
@@ -551,6 +577,45 @@ func traverseAdd(c context.Context, root cid.Cid, segments []string, nodeToAdd c
 		}
 		return add(c, node), nil
 	}
+}
+
+func traverseRemove(c context.Context, root cid.Cid, segments []string) (cid.Cid, error) {
+	log.Printf("traverseRemove %v/%#v", root, segments)
+	bytes, err := get(c, root.String())
+	if err != nil {
+		return cid.Undef, fmt.Errorf("could not get blob %s", root)
+	}
+	node, err := utils.ParseProtoNode(bytes)
+	if err != nil {
+		return cid.Undef, fmt.Errorf("could not parse blob %s as manifest: %v", root, err)
+	}
+
+	if len(segments) == 1 {
+		utils.RemoveLink(node, segments[0])
+	} else {
+		head := segments[0]
+		var next cid.Cid
+		next, err = utils.GetLink(node, head)
+		if err == merkledag.ErrLinkNotFound {
+			// Ok
+			next = add(c, utils.NewProtoNode())
+		} else if err != nil {
+			return cid.Undef, fmt.Errorf("could not get link: %v", err)
+		}
+		log.Printf("next: %v", next)
+
+		newHash, err := traverseRemove(c, next, segments[1:])
+		if err != nil {
+			return cid.Undef, fmt.Errorf("could not call recursively: %v", err)
+		}
+
+		err = utils.SetLink(node, head, newHash)
+		if err != nil {
+			return cid.Undef, fmt.Errorf("could not add link: %v", err)
+		}
+	}
+
+	return add(c, node), nil
 }
 
 func hashHandler(c *gin.Context) {

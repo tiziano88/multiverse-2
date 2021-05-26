@@ -43,3 +43,7 @@ func SetLink(node *merkledag.ProtoNode, name string, hash cid.Cid) error {
 		Cid: hash,
 	})
 }
+
+func RemoveLink(node *merkledag.ProtoNode, name string) error {
+	return node.RemoveNodeLink(name)
+}
