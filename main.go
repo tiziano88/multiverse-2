@@ -81,6 +81,8 @@ func main() {
 	}
 
 	router := gin.Default()
+	router.RedirectTrailingSlash = true
+	router.RedirectFixedPath = true
 	router.LoadHTMLGlob("templates/*")
 	router.POST("/*path", uploadHandler)
 	router.GET("/*path", renderHandler)
@@ -316,7 +318,8 @@ func uploadHandler(c *gin.Context) {
 					return
 				}
 				c.JSON(http.StatusOK, UploadResponse{
-					RedirectURL: "/" + hash.String() + "/" + path.Join(pathSegments...),
+					// RedirectURL: "/" + hash.String() + "/" + path.Join(pathSegments...),
+					RedirectURL: "/" + hash.String() + "/" + path.Join(pathSegments[:len(pathSegments)-1]...),
 				})
 				return
 			case "rename":
@@ -636,6 +639,10 @@ func renderHandler(c *gin.Context) {
 	log.Printf("path: %v", pathString)
 	segments := parsePath(pathString)
 	log.Printf("segments: %#v", segments)
+	if strings.HasSuffix(pathString, "/") {
+		c.Redirect(http.StatusMovedPermanently, strings.TrimSuffix(pathString, "/"))
+		return
+	}
 
 	root := cid.Undef
 	var err error
