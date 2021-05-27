@@ -639,7 +639,7 @@ func renderHandler(c *gin.Context) {
 	log.Printf("path: %v", pathString)
 	segments := parsePath(pathString)
 	log.Printf("segments: %#v", segments)
-	if strings.HasSuffix(pathString, "/") {
+	if pathString != "/" && strings.HasSuffix(pathString, "/") {
 		c.Redirect(http.StatusMovedPermanently, strings.TrimSuffix(pathString, "/"))
 		return
 	}

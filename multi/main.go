@@ -26,7 +26,7 @@ func main() {
 	target := flag.Arg(0)
 	hash := traverse(target)
 	fmt.Printf("%s %s\n", hash, target)
-	log.Printf("http://%s.%s", hash, webURL)
+	log.Printf("http://%s/%s", apiURL, hash)
 }
 
 func upload(node format.Node) (cid.Cid, error) {
@@ -46,7 +46,7 @@ func upload(node format.Node) (cid.Cid, error) {
 		if localHash.String() != remoteHash {
 			return cid.Undef, fmt.Errorf("hash mismatch; local: %s, remote: %s", localHash, remoteHash)
 		}
-		log.Printf("http://%s.%s", localHash, webURL)
+		log.Printf("http://%s/%s", apiURL, localHash)
 	}
 	return localHash, nil
 }
