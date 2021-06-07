@@ -15,9 +15,9 @@ import (
 	"github.com/tiziano88/multiverse/utils"
 )
 
-// const apiURL = "01.plus"
+const apiURL = "01.plus"
 
-const apiURL = "localhost:8080"
+// const apiURL = "localhost:8080"
 
 const webURL = "www." + apiURL
 
