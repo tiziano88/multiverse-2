@@ -84,9 +84,9 @@ func main() {
 	router.RedirectTrailingSlash = true
 	router.RedirectFixedPath = true
 	router.LoadHTMLGlob("templates/*")
+	// router.GET("/tailwind.min.css", gin.Stat)
 	router.POST("/*path", uploadHandler)
 	router.GET("/*path", renderHandler)
-
 	router.Run()
 
 	appengine.Main()
@@ -245,10 +245,7 @@ type RemoveRequest struct {
 }
 
 type UploadRequest struct {
-	Root string
-	// Type    string // file | dir
-	// Path    string
-	// Content []byte
+	Root  string
 	Blobs []UploadBlob
 }
 
@@ -317,16 +314,8 @@ func uploadHandler(c *gin.Context) {
 						c.AbortWithStatus(http.StatusNotFound)
 						return
 					}
-					// root, err = cid.Decode(u.Root)
-					// if err != nil {
-					// 	log.Print(err)
-					// 	c.AbortWithStatus(http.StatusNotFound)
-					// 	return
-					// }
 				}
 				c.JSON(http.StatusOK, UploadResponse{
-					// RedirectURL: "/" + hash.String() + "/" + path.Join(pathSegments...),
-					// RedirectURL: "/" + root.String() + "/" + path.Join(pathSegments[:len(pathSegments)-1]...),
 					Root: root.String(),
 				})
 				return
@@ -340,13 +329,13 @@ func uploadHandler(c *gin.Context) {
 				var r RemoveRequest
 				json.NewDecoder(c.Request.Body).Decode(&r)
 				log.Printf("remove: %#v", r)
-				pathSegments := parsePath(r.Path)
 				root, err := cid.Decode(r.Root)
 				if err != nil {
 					log.Print(err)
 					c.AbortWithStatus(http.StatusNotFound)
 					return
 				}
+				pathSegments := parsePath(r.Path)
 				hash, err = traverseRemove(c, root, pathSegments)
 				if err != nil {
 					log.Print(err)
@@ -354,7 +343,6 @@ func uploadHandler(c *gin.Context) {
 					return
 				}
 				c.JSON(http.StatusOK, UploadResponse{
-					// RedirectURL: "/" + hash.String() + "/" + path.Join(pathSegments[:len(pathSegments)-1]...),
 					Root: hash.String(),
 				})
 				return
@@ -650,6 +638,11 @@ func renderHandler(c *gin.Context) {
 	log.Printf("segments: %#v", segments)
 	if pathString != "/" && strings.HasSuffix(pathString, "/") {
 		c.Redirect(http.StatusMovedPermanently, strings.TrimSuffix(pathString, "/"))
+		return
+	}
+
+	if pathString == "/tailwind.min.css" {
+		c.File("./templates/tailwind.min.css")
 		return
 	}
 

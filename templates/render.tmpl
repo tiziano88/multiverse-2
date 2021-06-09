@@ -1,4 +1,4 @@
-<link href="https://unpkg.com/tailwindcss@^2/dist/tailwind.min.css" rel="stylesheet">
+<link href="/tailwind.min.css" rel="stylesheet">
 
 <body class="p-10">
 {{ $current := .current }}
@@ -151,7 +151,7 @@
 
 {{ if .node }}
 
-<div class="bg-white shadow-lg rounded-lg max-w-md py-4 px-8 my-2 border">
+<div class="hidden">
 	<form action="?" method="post" enctype="multipart/form-data">
 		<h2 class="text-lg">Add Files</h2>
 		<input type="file" id="file" name="file" multiple="multiple">
@@ -159,15 +159,6 @@
 			Add Dir:
 			<input type="file" id="file" name="directory" webkitdirectory>
 		</div> -->
-		<input type="submit" class="bg-blue-500 hover:bg-blue-700 text-white py-2 px-4 rounded">
-	</form>
-</div>
-
-<div class="bg-white shadow-lg rounded-lg max-w-md py-4 px-8 my-2 border">
-	<form action="?" method="post" >
-		<h2 class="text-lg">Link subtree</h2>
-		name <input type="text" id="dir" name="link_name" class="w-full border-2 rounded">
-		hash <input type="text" id="dir" name="link_hash" class="w-full border-2 rounded">
 		<input type="submit" class="bg-blue-500 hover:bg-blue-700 text-white py-2 px-4 rounded">
 	</form>
 </div>
