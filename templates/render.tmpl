@@ -37,7 +37,7 @@
 		class="bg-blue-500 hover:bg-blue-700 text-white py-2 px-4 rounded flex"
 		id="upload_files_button"
 		title="upload files"
-		onclick="upload_files()">
+		onclick="uploadFiles()">
 		<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 			<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
 		</svg>
@@ -123,10 +123,10 @@
 			</a>
 		</div>
 		<div class="px-2 hover:text-blue-500">
-			<a title="www" href="http://{{ $root }}.{{ $wwwHost }}/{{ with $path }}{{ . }}/{{ end }}{{.Name}}">
-			<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
-			</svg>
+			<a title="www" target="_blank" href="http://{{ $root }}.{{ $wwwHost }}/{{ with $path }}{{ . }}/{{ end }}{{.Name}}">
+				<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+				</svg>
 			</a>
 		</div>
 		<div class="px-2 hover:text-blue-500" title="rename" onclick="renameLink(event, '{{.Name}}')">
@@ -145,7 +145,7 @@
 	{{ end }}
 
 	{{ if eq .type "file" }}
-	<div class="font-mono whitespace-pre" contenteditable="true" id="blob" oninput="file_change()">{{ .blob_str }}</div>
+	<div class="font-mono whitespace-pre" contenteditable="true" id="blob" oninput="fileChange()">{{ .blob_str }}</div>
     {{ end }}
 </div>
 
@@ -175,7 +175,7 @@
 
 
 <script>
-function file_change() {
+function fileChange() {
 	const blob = document.getElementById('blob');
 	const save = document.getElementById('save_button');
 	save.disabled = false;
@@ -183,21 +183,51 @@ function file_change() {
 	console.log("change" );
 }
 
-async function upload_files() {
+async function uploadFiles() {
 	const fileSelect = document.getElementById('file_input');
 	fileSelect.click();
 }
 
+// https://stackoverflow.com/a/36046727/269518
+ToBase64 = function (u8) {
+	var u8 = new Uint8Array(u8);
+    return btoa(String.fromCharCode.apply(null, u8));
+}
+
+function _arrayBufferToBase64( buffer ) {
+    var binary = '';
+    var bytes = new Uint8Array( buffer );
+    var len = bytes.byteLength;
+    for (var i = 0; i < len; i++) {
+        binary += String.fromCharCode( bytes[ i ] );
+    }
+    return window.btoa( binary );
+}
+
 async function fileInputChange() {
 	const fileSelect = document.getElementById('file_input');
+	var request = {
+		root: "{{ .root }}",
+		blobs: [],
+	};
 	for (f of fileSelect.files) {
-		const reader = new FileReader();
-		reader.readAsBinaryString(f);
-		reader.addEventListener('load', (e) => {
-			console.log(e.target.result);
-		})
-		console.log(f, reader.result);
+		const data = await new Response(f).arrayBuffer();
+		const b64data = _arrayBufferToBase64(data);
+		request.blobs.push({
+			type: "file",
+			path: "{{ .path }}/" + f.name,
+			content: b64data,
+		});
 	}
+	console.log(request);
+	const response = await fetch("/api/update", {
+		method: "POST",
+		body: JSON.stringify(request)
+	});
+	const responseJson = await response.json();
+	console.log(responseJson);
+	const root = responseJson.Root;
+	window.location = "/" + root + "/{{ $path }}";
 }
 
 async function createEmptyDir() {
@@ -208,15 +238,18 @@ async function createEmptyDir() {
 	const response = await fetch("/api/update", {
 		method: "POST",
 		body: JSON.stringify({
-			type: "directory",
 			root: "{{ .root }}",
-			path: "{{ .path }}/" + name,
-			content: "",
+			blobs: [{
+				type: "directory",
+				path: "{{ .path }}/" + name,
+				content: "",
+			}]
 		})
 	});
 	const responseJson = await response.json();
 	console.log(responseJson);
-	window.location = responseJson.RedirectURL;
+	const root = responseJson.root;
+	window.location = "/" + root + "/{{ $path }}";
 }
 
 async function createEmptyFile() {
@@ -227,15 +260,18 @@ async function createEmptyFile() {
 	const response = await fetch("/api/update", {
 		method: "POST",
 		body: JSON.stringify({
-			type: "file",
 			root: "{{ .root }}",
-			path: "{{ .path }}/" + name,
-			content: "",
+			blobs: [{
+				type: "file",
+				path: "{{ .path }}/" + name,
+				content: "",
+			}]
 		})
 	});
 	const responseJson = await response.json();
 	console.log(responseJson);
-	window.location = responseJson.RedirectURL;
+	const root = responseJson.root;
+	window.location = "/" + root + "/{{ $path }}";
 }
 
 async function renameLink(e, linkName) {

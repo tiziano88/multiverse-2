@@ -245,12 +245,11 @@ type RemoveRequest struct {
 }
 
 type UploadRequest struct {
-	// Root  string
-	// Blobs []UploadBlob
-	Type    string // file | dir
-	Root    string
-	Path    string
-	Content []byte
+	Root string
+	// Type    string // file | dir
+	// Path    string
+	// Content []byte
+	Blobs []UploadBlob
 }
 
 type UploadBlob struct {
@@ -260,7 +259,7 @@ type UploadBlob struct {
 }
 
 type UploadResponse struct {
-	RedirectURL string
+	Root string
 }
 
 // root, pathSegments
@@ -287,39 +286,48 @@ func uploadHandler(c *gin.Context) {
 				var u UploadRequest
 				json.NewDecoder(c.Request.Body).Decode(&u)
 				log.Printf("upload: %#v", u)
-				pathSegments := parsePath(u.Path)
 				root, err := cid.Decode(u.Root)
 				if err != nil {
 					log.Print(err)
 					c.AbortWithStatus(http.StatusNotFound)
 					return
 				}
-				var newNode format.Node
-				switch u.Type {
-				case "file":
-					newNode, err = utils.ParseRawNode(u.Content)
+				for _, b := range u.Blobs {
+					pathSegments := parsePath(b.Path)
+					var newNode format.Node
+					switch b.Type {
+					case "file":
+						newNode, err = utils.ParseRawNode(b.Content)
+						if err != nil {
+							log.Print(err)
+							c.AbortWithStatus(http.StatusNotFound)
+							return
+						}
+					case "directory":
+						newNode = utils.NewProtoNode()
+					default:
+						log.Printf("invalid type: %s", b.Type)
+						c.AbortWithStatus(http.StatusNotFound)
+						return
+					}
+					newHash := add(c, newNode)
+					root, err = traverseAdd(c, root, pathSegments, newHash)
 					if err != nil {
 						log.Print(err)
 						c.AbortWithStatus(http.StatusNotFound)
 						return
 					}
-				case "directory":
-					newNode = utils.NewProtoNode()
-				default:
-					log.Printf("invalid type: %s", u.Type)
-					c.AbortWithStatus(http.StatusNotFound)
-					return
-				}
-				newHash := add(c, newNode)
-				hash, err = traverseAdd(c, root, pathSegments, newHash)
-				if err != nil {
-					log.Print(err)
-					c.AbortWithStatus(http.StatusNotFound)
-					return
+					// root, err = cid.Decode(u.Root)
+					// if err != nil {
+					// 	log.Print(err)
+					// 	c.AbortWithStatus(http.StatusNotFound)
+					// 	return
+					// }
 				}
 				c.JSON(http.StatusOK, UploadResponse{
 					// RedirectURL: "/" + hash.String() + "/" + path.Join(pathSegments...),
-					RedirectURL: "/" + hash.String() + "/" + path.Join(pathSegments[:len(pathSegments)-1]...),
+					// RedirectURL: "/" + root.String() + "/" + path.Join(pathSegments[:len(pathSegments)-1]...),
+					Root: root.String(),
 				})
 				return
 			case "rename":
@@ -346,7 +354,8 @@ func uploadHandler(c *gin.Context) {
 					return
 				}
 				c.JSON(http.StatusOK, UploadResponse{
-					RedirectURL: "/" + hash.String() + "/" + path.Join(pathSegments[:len(pathSegments)-1]...),
+					// RedirectURL: "/" + hash.String() + "/" + path.Join(pathSegments[:len(pathSegments)-1]...),
+					Root: hash.String(),
 				})
 				return
 			}
