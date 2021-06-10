@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"cloud.google.com/go/storage"
 	"github.com/gin-gonic/gin"
@@ -26,6 +27,9 @@ import (
 var (
 	blobStore DataStore
 	tagStore  DataStore
+
+	handlerBrowse http.Handler
+	handlerWWW    http.Handler
 )
 
 const blobBucketName = "multiverse-312721.appspot.com"
@@ -36,8 +40,7 @@ const tagSegment = "tag"
 
 var domainName = "localhost:8080"
 
-func hostSegments(c *gin.Context) []string {
-	host := c.Request.Host
+func hostSegments(host string) []string {
 	host = strings.TrimSuffix(host, domainName)
 	host = strings.TrimSuffix(host, ".")
 	hostSegments := strings.Split(host, ".")
@@ -80,16 +83,56 @@ func main() {
 		}
 	}
 
-	router := gin.Default()
-	router.RedirectTrailingSlash = true
-	router.RedirectFixedPath = true
-	router.LoadHTMLGlob("templates/*")
-	// router.GET("/tailwind.min.css", gin.Stat)
-	router.POST("/*path", uploadHandler)
-	router.GET("/*path", renderHandler)
-	router.Run()
+	{
+		router := gin.Default()
+		router.RedirectTrailingSlash = true
+		router.RedirectFixedPath = true
+		router.LoadHTMLGlob("templates/*")
+		router.POST("/api/update", apiUpdateHandler)
+		router.POST("/api/rename", apiRenameHandler)
+		router.POST("/api/remove", apiRemoveHandler)
+		router.GET("/blobs/:root/*path", browseBlobHandler)
+		router.StaticFile("/static/tailwind.min.css", "./templates/tailwind.min.css")
+		// router.GET("/static/tailwind.min.css", http.Fil)
+		// router.POST("/*path", uploadHandler)
+		// router.GET("/*path", renderHandler)
+		handlerBrowse = router
+	}
+	{
+		router := gin.Default()
+		router.GET("/*path", renderHandler)
+		handlerWWW = router
+	}
+
+	// router := gin.Default()
+	// router.RedirectTrailingSlash = true
+	// router.RedirectFixedPath = true
+	// router.LoadHTMLGlob("templates/*")
+	// // router.GET("/tailwind.min.css", gin.Stat)
+	// router.POST("/*path", uploadHandler)
+	// router.GET("/*path", renderHandler)
+	// router.Run()
+
+	s := &http.Server{
+		Addr:           ":8080",
+		Handler:        http.HandlerFunc(handlerRoot),
+		ReadTimeout:    5 * time.Second,
+		WriteTimeout:   10 * time.Second,
+		MaxHeaderBytes: 1 << 20,
+	}
+	log.Fatal(s.ListenAndServe())
 
 	appengine.Main()
+}
+
+func handlerRoot(w http.ResponseWriter, r *http.Request) {
+	hostSegments := hostSegments(r.Host)
+	log.Printf("host segments: %#v", hostSegments)
+	if len(hostSegments) == 0 {
+		handlerBrowse.ServeHTTP(w, r)
+	} else {
+		handlerWWW.ServeHTTP(w, r)
+	}
 }
 
 func indexHandler(c *gin.Context) {
@@ -143,6 +186,10 @@ func serveUI(c *gin.Context, root cid.Cid, segments []string, target cid.Cid, bl
 			Path: path.Join(segments[0 : i+1]...),
 		})
 	}
+	current := c.Param("path")
+	if !strings.HasSuffix(current, "/") {
+		current += "/"
+	}
 	switch target.Prefix().Codec {
 	case cid.DagProtobuf:
 		node, err := utils.ParseProtoNode(blob)
@@ -158,37 +205,25 @@ func serveUI(c *gin.Context, root cid.Cid, segments []string, target cid.Cid, bl
 			c.Data(http.StatusOK, "", blob)
 			return
 		}
-		current := c.Param("path")
-		if !strings.HasSuffix(current, "/") {
-			current += "/"
-		}
 		c.HTML(http.StatusOK, "render.tmpl", gin.H{
-			"type":     "directory",
-			"root":     root,
-			"path":     path.Join(segments...),
-			"segments": templateSegments,
-			"hash":     target,
-			"node":     node,
-			"parent":   path.Dir(path.Dir(current)),
-			"current":  current,
-			"wwwHost":  wwwSegment + "." + domainName,
+			"type":         "directory",
+			"wwwHost":      wwwSegment + "." + domainName,
+			"root":         root,
+			"path":         current,
+			"parentPath":   path.Dir(path.Dir(current)),
+			"pathSegments": templateSegments,
+			"node":         node,
 		})
 	case cid.Raw:
-		current := c.Param("path")
-		if !strings.HasSuffix(current, "/") {
-			current += "/"
-		}
 		c.HTML(http.StatusOK, "render.tmpl", gin.H{
-			"type":     "file",
-			"root":     root,
-			"path":     path.Join(segments...),
-			"segments": templateSegments,
-			"hash":     target,
-			"parent":   path.Dir(path.Dir(current)),
-			"current":  current,
-			"blob":     blob,
-			"blob_str": string(blob),
-			"wwwHost":  wwwSegment + "." + domainName,
+			"type":         "file",
+			"wwwHost":      wwwSegment + "." + domainName,
+			"root":         root,
+			"path":         current,
+			"parentPath":   path.Dir(path.Dir(current)),
+			"pathSegments": templateSegments,
+			"blob":         blob,
+			"blob_str":     string(blob),
 		})
 	}
 }
@@ -265,8 +300,78 @@ func parseFullPath(p string) (string, []string) {
 	return segments[0], segments[1:]
 }
 
-func uploadHandler(c *gin.Context) {
-	hostSegments := hostSegments(c)
+func apiUpdateHandler(c *gin.Context) {
+	var u UploadRequest
+	json.NewDecoder(c.Request.Body).Decode(&u)
+	log.Printf("upload: %#v", u)
+	root, err := cid.Decode(u.Root)
+	if err != nil {
+		log.Print(err)
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	for _, b := range u.Blobs {
+		pathSegments := parsePath(b.Path)
+		var newNode format.Node
+		switch b.Type {
+		case "file":
+			newNode, err = utils.ParseRawNode(b.Content)
+			if err != nil {
+				log.Print(err)
+				c.AbortWithStatus(http.StatusNotFound)
+				return
+			}
+		case "directory":
+			newNode = utils.NewProtoNode()
+		default:
+			log.Printf("invalid type: %s", b.Type)
+			c.AbortWithStatus(http.StatusNotFound)
+			return
+		}
+		newHash := add(c, newNode)
+		root, err = traverseAdd(c, root, pathSegments, newHash)
+		if err != nil {
+			log.Print(err)
+			c.AbortWithStatus(http.StatusNotFound)
+			return
+		}
+	}
+	c.JSON(http.StatusOK, UploadResponse{
+		Root: root.String(),
+	})
+}
+
+func apiRenameHandler(c *gin.Context) {
+	var r RenameRequest
+	json.NewDecoder(c.Request.Body).Decode(&r)
+	log.Printf("rename: %#v", r)
+	// TODO
+}
+
+func apiRemoveHandler(c *gin.Context) {
+	var r RemoveRequest
+	json.NewDecoder(c.Request.Body).Decode(&r)
+	log.Printf("remove: %#v", r)
+	root, err := cid.Decode(r.Root)
+	if err != nil {
+		log.Print(err)
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	pathSegments := parsePath(r.Path)
+	hash, err := traverseRemove(c, root, pathSegments)
+	if err != nil {
+		log.Print(err)
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	c.JSON(http.StatusOK, UploadResponse{
+		Root: hash.String(),
+	})
+}
+
+func xxxuploadHandler(c *gin.Context) {
+	hostSegments := hostSegments(c.Request.Host)
 	log.Printf("host segments: %#v", hostSegments)
 	pathString := c.Param("path")
 	log.Printf("path: %v", pathString)
@@ -629,8 +734,42 @@ func hashHandler(c *gin.Context) {
 	c.Data(http.StatusOK, "", b)
 }
 
+func browseBlobHandler(c *gin.Context) {
+	pathString := c.Param("path")
+	log.Printf("path: %v", pathString)
+	segments := parsePath(pathString)
+	log.Printf("segments: %#v", segments)
+
+	if pathString != "/" && strings.HasSuffix(pathString, "/") {
+		c.Redirect(http.StatusMovedPermanently, strings.TrimSuffix(pathString, "/"))
+		return
+	}
+
+	root := cid.Undef
+	var err error
+	root, err = cid.Decode(c.Param("root"))
+	if err != nil {
+		log.Print(err)
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	target, err := traverse(c, root, segments)
+	if err != nil {
+		log.Print(err)
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	blob, err := get(c, target.String())
+	if err != nil {
+		log.Print(err)
+		c.Abort()
+		return
+	}
+	serveUI(c, root, segments, target, blob)
+}
+
 func renderHandler(c *gin.Context) {
-	hostSegments := hostSegments(c)
+	hostSegments := hostSegments(c.Request.Host)
 	log.Printf("host segments: %v", hostSegments)
 	pathString := c.Param("path")
 	log.Printf("path: %v", pathString)

@@ -1,20 +1,21 @@
-<link href="/tailwind.min.css" rel="stylesheet">
+<link href="/static/tailwind.min.css" rel="stylesheet">
 
 <body class="p-10">
-{{ $current := .current }}
 {{ $root := .root }}
-{{ $wwwHost := .wwwHost }}
 {{ $path := .path }}
+{{ $parentPath := .parentPath }}
+{{ $pathSegments := .pathSegments }}
+{{ $wwwHost := .wwwHost }}
 
 <div class="divide-y-2 divide-blue-500 border-2 border-blue-500 rounded-lg">
 	<div class="p-2 flex">
 		<div class="px-2 bg-yellow-100 hover:bg-yellow-300 border border-yellow-200 rounded-lg w-min">
-			<a href="/{{ .root }}">{{ .root }}</a>
+			<a href="/blobs/{{ .root }}">{{ .root }}</a>
 		</div>
-		{{ range .segments }}
+		{{ range $pathSegments }}
 		<div>
 			<div class="inline px-1">/</div>
-			<a class="underline" href="/{{ $root }}/{{ .Path }}">{{ .Name }}</a>
+			<a class="underline" href="/blobs/{{ $root }}/{{ .Path }}">{{ .Name }}</a>
 		</div>
 		{{ end }}
 	</div>
@@ -72,8 +73,8 @@
 		{{ end }}
 	</div>
 
-	{{ if .segments }}
-	<a href="{{ .parent }}" class="block p-2 hover:bg-blue-200 font-mono flex">
+	{{ if $pathSegments }}
+	<a href="/blobs/{{ $root }}{{ $parentPath }}" class="block p-2 hover:bg-blue-200 font-mono flex">
 		<div class="px-2 text-blue-500">
 			<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
@@ -86,7 +87,7 @@
 	{{/* dirs */}}
     {{ range .node.Links }}
 	{{ if eq .Cid.Prefix.Codec 0x70 }}
-	<a href="{{ $current }}{{ .Name }}" class="block p-2 hover:bg-blue-200 font-mono flex">
+	<a href="/blobs/{{ $root }}{{ with $path }}{{ . }}{{ else }}/{{ end }}{{ .Name }}" class="block p-2 hover:bg-blue-200 font-mono flex">
 		<div class="px-2 text-blue-500" onclick="rename()">
 			<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
@@ -118,7 +119,7 @@
 			</svg>
 		</div>
 		<div class="px-2 flex-1">
-			<a href="{{ $current }}{{ .Name }}" class="hover:underline hover:text-blue-500">
+			<a href="/blobs/{{ $root }}{{ with $path }}{{ . }}{{ else }}/{{ end }}{{ .Name }}" class="hover:underline hover:text-blue-500">
 				{{ .Name }}
 			</a>
 		</div>
@@ -150,7 +151,6 @@
 </div>
 
 {{ if .node }}
-
 <div class="hidden">
 	<form action="?" method="post" enctype="multipart/form-data">
 		<h2 class="text-lg">Add Files</h2>
@@ -218,7 +218,7 @@ async function fileInputChange() {
 	const responseJson = await response.json();
 	console.log(responseJson);
 	const root = responseJson.Root;
-	window.location = "/" + root + "/{{ $path }}";
+	window.location = "/blobs/" + root + "/{{ $path }}";
 }
 
 async function createEmptyDir() {
@@ -240,7 +240,7 @@ async function createEmptyDir() {
 	const responseJson = await response.json();
 	console.log(responseJson);
 	const root = responseJson.root;
-	window.location = "/" + root + "/{{ $path }}";
+	window.location = "/blobs/" + root + "/{{ $path }}";
 }
 
 async function createEmptyFile() {
@@ -262,7 +262,7 @@ async function createEmptyFile() {
 	const responseJson = await response.json();
 	console.log(responseJson);
 	const root = responseJson.root;
-	window.location = "/" + root + "/{{ $path }}";
+	window.location = "/blobs/" + root + "/{{ $path }}";
 }
 
 async function renameLink(e, linkName) {
