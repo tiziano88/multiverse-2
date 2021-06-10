@@ -199,7 +199,7 @@ func serveUI(c *gin.Context, root cid.Cid, segments []string, target cid.Cid, bl
 			c.Data(http.StatusOK, "", blob)
 			return
 		}
-		c.HTML(http.StatusOK, "render.tmpl", gin.H{
+		c.HTML(http.StatusOK, "browse.tmpl", gin.H{
 			"type":         "directory",
 			"wwwHost":      wwwSegment + "." + domainName,
 			"root":         root,
@@ -209,7 +209,7 @@ func serveUI(c *gin.Context, root cid.Cid, segments []string, target cid.Cid, bl
 			"node":         node,
 		})
 	case cid.Raw:
-		c.HTML(http.StatusOK, "render.tmpl", gin.H{
+		c.HTML(http.StatusOK, "browse.tmpl", gin.H{
 			"type":         "file",
 			"wwwHost":      wwwSegment + "." + domainName,
 			"root":         root,
