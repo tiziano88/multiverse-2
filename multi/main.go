@@ -2,13 +2,13 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"path"
-	"strconv"
 
 	"github.com/ipfs/go-cid"
 	format "github.com/ipfs/go-ipld-format"
@@ -21,38 +21,87 @@ const apiURL = "localhost:8080"
 
 const webURL = "www." + apiURL
 
+type UploadRequest struct {
+	Root  string
+	Blobs []UploadBlob
+}
+
+type UploadBlob struct {
+	Type    string // file | directory
+	Path    string
+	Content []byte
+}
+
+type UploadResponse struct {
+	Root string
+}
+
+type GetRequest struct {
+	Root string
+	Path string
+}
+
+type GetResponse struct {
+	Content []byte
+}
+
 func main() {
 	flag.Parse()
 	target := flag.Arg(0)
 	hash := traverse(target)
 	fmt.Printf("%s %s\n", hash, target)
-	log.Printf("http://%s/%s", apiURL, hash)
+	log.Printf("http://%s/blobs/%s", apiURL, hash)
 }
 
 func upload(node format.Node) (cid.Cid, error) {
 	localHash := node.Cid()
 	if !exists(localHash) {
-		b := node.RawData()
-		res, err := http.Post("http://"+apiURL+"/upload?codec="+strconv.Itoa(int(localHash.Prefix().Codec)), "", bytes.NewReader(b))
+		blobType := ""
+		switch localHash.Prefix().Codec {
+		case cid.Raw:
+			blobType = "file"
+		case cid.DagProtobuf:
+			blobType = "directory"
+		}
+		r := UploadRequest{
+			Root: "",
+			Blobs: []UploadBlob{
+				{
+					Type:    blobType,
+					Path:    "",
+					Content: node.RawData(),
+				},
+			},
+		}
+		buf := bytes.Buffer{}
+		json.NewEncoder(&buf).Encode(r)
+		res, err := http.Post("http://"+apiURL+"/api/update", "", &buf)
 		if err != nil {
 			return cid.Undef, fmt.Errorf("could not POST request: %v", err)
 		}
-		body, err := ioutil.ReadAll(res.Body)
+		resJson := UploadResponse{}
+		err = json.NewDecoder(res.Body).Decode(&resJson)
 		if err != nil {
 			return cid.Undef, fmt.Errorf("could not read response body: %v", err)
 		}
-		log.Printf("uploaded: %s", string(body))
-		remoteHash := string(body)
+		log.Printf("uploaded: %#v", resJson)
+		remoteHash := resJson.Root
 		if localHash.String() != remoteHash {
 			return cid.Undef, fmt.Errorf("hash mismatch; local: %s, remote: %s", localHash, remoteHash)
 		}
-		log.Printf("http://%s/%s", apiURL, localHash)
+		log.Printf("http://%s/blobs/%s", apiURL, localHash)
 	}
 	return localHash, nil
 }
 
 func exists(hash cid.Cid) bool {
-	res, err := http.Get("http://" + apiURL + "/blobs/" + hash.String() + "?stat=1")
+	r := GetRequest{
+		Root: hash.String(),
+		Path: "",
+	}
+	buf := bytes.Buffer{}
+	json.NewEncoder(&buf).Encode(r)
+	res, err := http.Post("http://"+apiURL+"/api/get", "", &buf)
 	if err != nil {
 		log.Fatal(err)
 	}
