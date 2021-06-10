@@ -11,7 +11,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -85,8 +84,8 @@ func main() {
 
 	{
 		router := gin.Default()
-		// router.RedirectTrailingSlash = true
-		// router.RedirectFixedPath = true
+		router.RedirectTrailingSlash = false
+		router.RedirectFixedPath = false
 		router.LoadHTMLGlob("templates/*")
 
 		router.POST("/api/get", apiGetHandler)
@@ -300,7 +299,7 @@ type GetResponse struct {
 func apiUpdateHandler(c *gin.Context) {
 	var req UploadRequest
 	json.NewDecoder(c.Request.Body).Decode(&req)
-	log.Printf("req: %#v", req)
+	// log.Printf("req: %#v", req)
 
 	if req.Root == "" && len(req.Blobs) == 1 {
 		log.Printf("individual blob")
@@ -349,7 +348,10 @@ func apiUpdateHandler(c *gin.Context) {
 		return
 	}
 	for _, b := range req.Blobs {
+		log.Printf("type: %s", b.Type)
+		log.Printf("path: %s", b.Path)
 		pathSegments := parsePath(b.Path)
+		log.Printf("path segments: %#v", pathSegments)
 		var newNode format.Node
 		switch b.Type {
 		case "file":
@@ -367,6 +369,7 @@ func apiUpdateHandler(c *gin.Context) {
 			return
 		}
 		newHash := add(c, newNode)
+		log.Printf("new hash: %s", newHash.String())
 		root, err = traverseAdd(c, root, pathSegments, newHash)
 		if err != nil {
 			log.Print(err)
@@ -441,248 +444,6 @@ func apiGetHandler(c *gin.Context) {
 	}
 	log.Printf("res: %#v", res)
 	c.JSON(http.StatusOK, res)
-}
-
-func xxxuploadHandler(c *gin.Context) {
-	hostSegments := hostSegments(c.Request.Host)
-	log.Printf("host segments: %#v", hostSegments)
-	pathString := c.Param("path")
-	log.Printf("path: %v", pathString)
-	segments := parsePath(pathString)
-	log.Printf("segments: %#v", segments)
-
-	hash := cid.Undef
-	var err error
-	if len(hostSegments) == 0 {
-		switch segments[0] {
-		case "api":
-			switch segments[1] {
-			case "update":
-				var u UploadRequest
-				json.NewDecoder(c.Request.Body).Decode(&u)
-				log.Printf("upload: %#v", u)
-				root, err := cid.Decode(u.Root)
-				if err != nil {
-					log.Print(err)
-					c.AbortWithStatus(http.StatusNotFound)
-					return
-				}
-				for _, b := range u.Blobs {
-					pathSegments := parsePath(b.Path)
-					var newNode format.Node
-					switch b.Type {
-					case "file":
-						newNode, err = utils.ParseRawNode(b.Content)
-						if err != nil {
-							log.Print(err)
-							c.AbortWithStatus(http.StatusNotFound)
-							return
-						}
-					case "directory":
-						newNode = utils.NewProtoNode()
-					default:
-						log.Printf("invalid type: %s", b.Type)
-						c.AbortWithStatus(http.StatusNotFound)
-						return
-					}
-					newHash := add(c, newNode)
-					root, err = traverseAdd(c, root, pathSegments, newHash)
-					if err != nil {
-						log.Print(err)
-						c.AbortWithStatus(http.StatusNotFound)
-						return
-					}
-				}
-				c.JSON(http.StatusOK, UploadResponse{
-					Root: root.String(),
-				})
-				return
-			case "rename":
-				var r RenameRequest
-				json.NewDecoder(c.Request.Body).Decode(&r)
-				log.Printf("rename: %#v", r)
-				// TODO
-				return
-			case "remove":
-				var r RemoveRequest
-				json.NewDecoder(c.Request.Body).Decode(&r)
-				log.Printf("remove: %#v", r)
-				root, err := cid.Decode(r.Root)
-				if err != nil {
-					log.Print(err)
-					c.AbortWithStatus(http.StatusNotFound)
-					return
-				}
-				pathSegments := parsePath(r.Path)
-				hash, err = traverseRemove(c, root, pathSegments)
-				if err != nil {
-					log.Print(err)
-					c.AbortWithStatus(http.StatusNotFound)
-					return
-				}
-				c.JSON(http.StatusOK, UploadResponse{
-					Root: hash.String(),
-				})
-				return
-			}
-		}
-		log.Print("straight upload")
-		codec := c.Query("codec")
-		log.Printf("codec: %v", codec)
-
-		codecParsed := cid.Raw
-
-		if codec != "" {
-			codecParsed, err = strconv.Atoi(codec)
-			if err != nil {
-				log.Print(err)
-				c.AbortWithStatus(http.StatusBadRequest)
-				return
-			}
-		}
-		// Straight upload.
-		bytes, err := ioutil.ReadAll(c.Request.Body)
-		if err != nil {
-			log.Print(err)
-			c.AbortWithStatus(http.StatusInternalServerError)
-			return
-		}
-
-		var node format.Node
-		if codecParsed == cid.Raw {
-			node, err = utils.ParseRawNode(bytes)
-			if err != nil {
-				log.Print(err)
-				c.AbortWithStatus(http.StatusBadRequest)
-				return
-			}
-		} else if codecParsed == cid.DagProtobuf {
-			node, err = utils.ParseProtoNode(bytes)
-			if err != nil {
-				log.Print(err)
-				c.AbortWithStatus(http.StatusBadRequest)
-				return
-			}
-		}
-		if node == nil {
-			log.Print("invalid cid")
-			c.AbortWithStatus(http.StatusBadRequest)
-			return
-		}
-		hash := add(c, node)
-		// c.Redirect(http.StatusFound, fmt.Sprintf("//%s%s", hash, webSuffix))
-		log.Printf("uploaded: %s", hash)
-		c.String(http.StatusOK, hash.String())
-		return
-	}
-
-	if len(hostSegments) == 2 && hostSegments[1] == wwwSegment {
-		hash, err = cid.Decode(hostSegments[0])
-		if err != nil {
-			log.Print(err)
-			c.AbortWithStatus(http.StatusInternalServerError)
-			return
-		}
-		log.Printf("hash: %v", hash)
-	}
-
-	if dirName, _ := c.GetPostForm("dir"); dirName != "" {
-		segmentsLocal := parsePath(pathString)
-		segmentsLocal = append(segmentsLocal, dirName)
-		log.Printf("creating empty dir: %s -> %v", dirName, segmentsLocal)
-
-		// Empty node.
-		newHash := add(c, utils.NewProtoNode())
-		hash, err = traverseAdd(c, hash, segmentsLocal, newHash)
-		if err != nil {
-			log.Print(err)
-			c.AbortWithStatus(http.StatusNotFound)
-			return
-		}
-		redirectToCid(c, hash, c.Param("path"))
-		return
-	}
-
-	if linkName, _ := c.GetPostForm("link_name"); linkName != "" {
-		linkHashString, _ := c.GetPostForm("link_hash")
-		linkHash, err := cid.Decode(linkHashString)
-		if err != nil {
-			log.Print(err)
-			c.AbortWithStatus(http.StatusBadRequest)
-			return
-		}
-
-		segmentsLocal := parsePath(pathString)
-		segmentsLocal = append(segmentsLocal, linkName)
-		log.Printf("creating link: %s/%v -> %s", linkName, segmentsLocal, linkHash)
-
-		// Target node.
-		hash, err = traverseAdd(c, hash, segmentsLocal, linkHash)
-		if err != nil {
-			log.Print(err)
-			c.AbortWithStatus(http.StatusNotFound)
-			return
-		}
-		redirectToCid(c, hash, c.Param("path"))
-		return
-	}
-
-	if tagName, _ := c.GetPostForm("tag_name"); tagName != "" {
-		tagValueString, _ := c.GetPostForm("tag_value")
-		log.Printf("setting tag %s -> %s", tagName, tagValueString)
-		tagValue, err := cid.Decode(tagValueString)
-		if err != nil {
-			log.Print(err)
-			c.AbortWithStatus(http.StatusBadRequest)
-			return
-		}
-
-		err = tagStore.Set(c, tagName, []byte(tagValue.String()))
-		if err != nil {
-			log.Print(err)
-			c.AbortWithStatus(http.StatusNotFound)
-			return
-		}
-		c.Redirect(http.StatusFound, fmt.Sprintf("//%s.%s.%s", tagName, tagSegment, domainName))
-		return
-	}
-
-	// See https://github.com/gin-gonic/gin#upload-files .
-	form, err := c.MultipartForm()
-	if err != nil {
-		log.Print(err)
-	}
-	for _, file := range form.File["file"] {
-		log.Printf("processing file %s (%dB)", file.Filename, file.Size)
-		mpFile, err := file.Open()
-		if err != nil {
-			log.Fatal(err)
-		}
-		b, err := ioutil.ReadAll(mpFile)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		segmentsLocal := parsePath(pathString)
-		segmentsLocal = append(segmentsLocal, file.Filename)
-
-		node, err := utils.ParseRawNode(b)
-		if err != nil {
-			log.Print(err)
-			c.AbortWithStatus(http.StatusNotFound)
-			return
-		}
-
-		newHash := add(c, node)
-		hash, err = traverseAdd(c, hash, segmentsLocal, newHash)
-		if err != nil {
-			log.Print(err)
-			c.AbortWithStatus(http.StatusNotFound)
-			return
-		}
-	}
-
-	redirectToCid(c, hash, c.Param("path"))
 }
 
 func add(c context.Context, node format.Node) cid.Cid {
@@ -796,29 +557,22 @@ func traverseRemove(c context.Context, root cid.Cid, segments []string) (cid.Cid
 	return add(c, node), nil
 }
 
-func hashHandler(c *gin.Context) {
-	hash := c.Param("hash")
-	b, err := blobStore.Get(c, hash)
-	if err != nil {
-		log.Print(err)
-		c.Abort()
-		return
-	}
-	c.Data(http.StatusOK, "", b)
-}
-
 func browseBlobHandler(c *gin.Context) {
 	pathString := c.Param("path")
-	log.Printf("path: %v", pathString)
+	log.Printf("path: %q", pathString)
 	segments := parsePath(pathString)
 	log.Printf("segments: %#v", segments)
 
-	/*
-		if pathString != "/" && strings.HasSuffix(pathString, "/") {
-			c.Redirect(http.StatusMovedPermanently, strings.TrimSuffix(pathString, "/"))
-			return
-		}
-	*/
+	// if pathString != "/" && strings.HasSuffix(pathString, "/") {
+	// 	c.Redirect(http.StatusMovedPermanently, strings.TrimSuffix(pathString, "/"))
+	// 	return
+	// }
+	if strings.HasSuffix(c.Request.URL.Path, "/") {
+		to := strings.TrimSuffix(c.Request.URL.Path, "/")
+		log.Printf("redirecting to: %q", to)
+		c.Redirect(http.StatusMovedPermanently, to)
+		return
+	}
 
 	root, err := cid.Decode(c.Param("root"))
 	if err != nil {
@@ -898,52 +652,4 @@ func renderHandler(c *gin.Context) {
 	}
 
 	serveWWW(c, root, segments)
-}
-
-func proxyHandler(c *gin.Context) {
-	target := c.Query("target")
-	log.Printf("proxy: %s", target)
-	res, err := http.Get(target)
-	if err != nil {
-		log.Print(err)
-		c.Abort()
-		return
-	}
-	blob, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		log.Print(err)
-		c.Abort()
-		return
-	}
-	node, err := utils.ParseRawNode(blob)
-	if err != nil {
-		log.Print(err)
-		c.Abort()
-		return
-	}
-	h := add(c, node)
-	log.Printf("%s -> %s", target, h)
-	c.String(http.StatusOK, "%s", h)
-}
-
-func snapshotHandler(c *gin.Context) {
-	target := c.Query("target")
-	log.Printf("snapshot target: %s", target)
-	/*
-		res, err := http.Get(target)
-		if err != nil {
-			log.Printf("could not fetch %s: %s", target, err)
-			c.Abort()
-			return
-		}
-		body, err := ioutil.ReadAll(res.Body)
-		if err != nil {
-			log.Printf("could not fetch %s: %s", target, err)
-			c.Abort()
-			return
-		}
-	*/
-	c.HTML(http.StatusOK, "snapshot.tmpl", gin.H{
-		"target": target,
-	})
 }
