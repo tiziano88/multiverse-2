@@ -88,16 +88,17 @@ func main() {
 		// router.RedirectTrailingSlash = true
 		// router.RedirectFixedPath = true
 		router.LoadHTMLGlob("templates/*")
+
+		router.POST("/api/get", apiGetHandler)
 		router.POST("/api/update", apiUpdateHandler)
 		router.POST("/api/rename", apiRenameHandler)
 		router.POST("/api/remove", apiRemoveHandler)
-		router.POST("/api/get", apiGetHandler)
+
 		router.GET("/blobs/:root", browseBlobHandler)
 		router.GET("/blobs/:root/*path", browseBlobHandler)
+
 		router.StaticFile("/static/tailwind.min.css", "./templates/tailwind.min.css")
-		// router.GET("/static/tailwind.min.css", http.Fil)
-		// router.POST("/*path", uploadHandler)
-		// router.GET("/*path", renderHandler)
+
 		handlerBrowse = router
 	}
 	{
@@ -105,15 +106,6 @@ func main() {
 		router.GET("/*path", renderHandler)
 		handlerWWW = router
 	}
-
-	// router := gin.Default()
-	// router.RedirectTrailingSlash = true
-	// router.RedirectFixedPath = true
-	// router.LoadHTMLGlob("templates/*")
-	// // router.GET("/tailwind.min.css", gin.Stat)
-	// router.POST("/*path", uploadHandler)
-	// router.GET("/*path", renderHandler)
-	// router.Run()
 
 	s := &http.Server{
 		Addr:           ":8080",
@@ -188,10 +180,10 @@ func serveUI(c *gin.Context, root cid.Cid, segments []string, target cid.Cid, bl
 			Path: path.Join(segments[0 : i+1]...),
 		})
 	}
-	current := c.Param("path")
-	if !strings.HasSuffix(current, "/") {
-		current += "/"
-	}
+	pathStr := c.Param("path")
+	// if !strings.HasSuffix(current, "/") {
+	// 	current += "/"
+	// }
 	switch target.Prefix().Codec {
 	case cid.DagProtobuf:
 		node, err := utils.ParseProtoNode(blob)
@@ -211,8 +203,8 @@ func serveUI(c *gin.Context, root cid.Cid, segments []string, target cid.Cid, bl
 			"type":         "directory",
 			"wwwHost":      wwwSegment + "." + domainName,
 			"root":         root,
-			"path":         current,
-			"parentPath":   path.Dir(path.Dir(current)),
+			"path":         pathStr,
+			"parentPath":   path.Dir(path.Dir(pathStr)),
 			"pathSegments": templateSegments,
 			"node":         node,
 		})
@@ -221,8 +213,8 @@ func serveUI(c *gin.Context, root cid.Cid, segments []string, target cid.Cid, bl
 			"type":         "file",
 			"wwwHost":      wwwSegment + "." + domainName,
 			"root":         root,
-			"path":         current,
-			"parentPath":   path.Dir(path.Dir(current)),
+			"path":         pathStr,
+			"parentPath":   path.Dir(path.Dir(pathStr)),
 			"pathSegments": templateSegments,
 			"blob":         blob,
 			"blob_str":     string(blob),
@@ -306,14 +298,14 @@ type GetResponse struct {
 }
 
 func apiUpdateHandler(c *gin.Context) {
-	var u UploadRequest
-	json.NewDecoder(c.Request.Body).Decode(&u)
-	log.Printf("upload: %#v", u)
+	var req UploadRequest
+	json.NewDecoder(c.Request.Body).Decode(&req)
+	log.Printf("req: %#v", req)
 
-	if u.Root == "" && len(u.Blobs) == 1 {
+	if req.Root == "" && len(req.Blobs) == 1 {
 		log.Printf("individual blob")
 		// Individual blob upload.
-		b := u.Blobs[0]
+		b := req.Blobs[0]
 		var node format.Node
 		var err error
 		switch b.Type {
@@ -350,13 +342,13 @@ func apiUpdateHandler(c *gin.Context) {
 		return
 	}
 
-	root, err := cid.Decode(u.Root)
+	root, err := cid.Decode(req.Root)
 	if err != nil {
 		log.Print(err)
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
-	for _, b := range u.Blobs {
+	for _, b := range req.Blobs {
 		pathSegments := parsePath(b.Path)
 		var newNode format.Node
 		switch b.Type {
@@ -382,9 +374,11 @@ func apiUpdateHandler(c *gin.Context) {
 			return
 		}
 	}
-	c.JSON(http.StatusOK, UploadResponse{
+	res := UploadResponse{
 		Root: root.String(),
-	})
+	}
+	log.Printf("res: %#v", res)
+	c.JSON(http.StatusOK, res)
 }
 
 func apiRenameHandler(c *gin.Context) {
@@ -395,39 +389,41 @@ func apiRenameHandler(c *gin.Context) {
 }
 
 func apiRemoveHandler(c *gin.Context) {
-	var r RemoveRequest
-	json.NewDecoder(c.Request.Body).Decode(&r)
-	log.Printf("remove: %#v", r)
-	root, err := cid.Decode(r.Root)
+	var req RemoveRequest
+	json.NewDecoder(c.Request.Body).Decode(&req)
+	log.Printf("req: %#v", req)
+	root, err := cid.Decode(req.Root)
 	if err != nil {
 		log.Print(err)
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
-	pathSegments := parsePath(r.Path)
+	pathSegments := parsePath(req.Path)
 	hash, err := traverseRemove(c, root, pathSegments)
 	if err != nil {
 		log.Print(err)
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
-	c.JSON(http.StatusOK, UploadResponse{
+	res := UploadResponse{
 		Root: hash.String(),
-	})
+	}
+	log.Printf("res: %#v", res)
+	c.JSON(http.StatusOK, res)
 }
 
 func apiGetHandler(c *gin.Context) {
-	var r GetRequest
-	json.NewDecoder(c.Request.Body).Decode(&r)
-	log.Printf("get: %#v", r)
+	var req GetRequest
+	json.NewDecoder(c.Request.Body).Decode(&req)
+	log.Printf("req: %#v", req)
 
-	root, err := cid.Decode(r.Root)
+	root, err := cid.Decode(req.Root)
 	if err != nil {
 		log.Print(err)
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
-	segments := parsePath(r.Path)
+	segments := parsePath(req.Path)
 	target, err := traverse(c, root, segments)
 	if err != nil {
 		log.Print(err)
@@ -440,9 +436,11 @@ func apiGetHandler(c *gin.Context) {
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
-	c.JSON(http.StatusOK, GetResponse{
+	res := GetResponse{
 		Content: blob,
-	})
+	}
+	log.Printf("res: %#v", res)
+	c.JSON(http.StatusOK, res)
 }
 
 func xxxuploadHandler(c *gin.Context) {
