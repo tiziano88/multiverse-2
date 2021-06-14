@@ -1,4 +1,4 @@
-package main
+package datastore
 
 import (
 	"context"
@@ -16,19 +16,19 @@ type DataStore interface {
 }
 
 type FileDataStore struct {
-	dirName string
+	DirName string
 }
 
 func (s FileDataStore) Set(ctx context.Context, name string, value []byte) error {
-	return ioutil.WriteFile(path.Join(s.dirName, name), value, 0644)
+	return ioutil.WriteFile(path.Join(s.DirName, name), value, 0644)
 }
 
 func (s FileDataStore) Get(ctx context.Context, name string) ([]byte, error) {
-	return ioutil.ReadFile(path.Join(s.dirName, name))
+	return ioutil.ReadFile(path.Join(s.DirName, name))
 }
 
 func (s FileDataStore) Has(ctx context.Context, name string) (bool, error) {
-	_, err := os.Stat(path.Join(s.dirName, name))
+	_, err := os.Stat(path.Join(s.DirName, name))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return false, nil
@@ -40,19 +40,19 @@ func (s FileDataStore) Has(ctx context.Context, name string) (bool, error) {
 }
 
 type CloudDataStore struct {
-	client     *storage.Client
-	bucketName string
+	Client     *storage.Client
+	BucketName string
 }
 
 func (s CloudDataStore) Set(ctx context.Context, name string, value []byte) error {
-	wc := s.client.Bucket(s.bucketName).Object(name).NewWriter(ctx)
+	wc := s.Client.Bucket(s.BucketName).Object(name).NewWriter(ctx)
 	defer wc.Close()
 	_, err := wc.Write(value)
 	return err
 }
 
 func (s CloudDataStore) Get(ctx context.Context, name string) ([]byte, error) {
-	rc, err := s.client.Bucket(s.bucketName).Object(name).NewReader(ctx)
+	rc, err := s.Client.Bucket(s.BucketName).Object(name).NewReader(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +66,7 @@ func (s CloudDataStore) Get(ctx context.Context, name string) ([]byte, error) {
 
 func (s CloudDataStore) Has(ctx context.Context, name string) (bool, error) {
 	// TODO: return size
-	_, err := s.client.Bucket(s.bucketName).Object(name).Attrs(ctx)
+	_, err := s.Client.Bucket(s.BucketName).Object(name).Attrs(ctx)
 	if err != nil {
 		if err == storage.ErrObjectNotExist {
 			return false, nil

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -10,10 +11,16 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"path/filepath"
 
 	"github.com/ipfs/go-cid"
 	format "github.com/ipfs/go-ipld-format"
+	"github.com/tiziano88/multiverse/datastore"
 	"github.com/tiziano88/multiverse/utils"
+)
+
+var (
+	blobStore datastore.DataStore
 )
 
 // const apiURL = "01.plus"
@@ -47,9 +54,22 @@ type GetResponse struct {
 }
 
 func main() {
-	uploadCmd := flag.NewFlagSet("upload", flag.ExitOnError)
+	userCacheDir, err := os.UserCacheDir()
+	if err != nil {
+		fmt.Printf("could not get cache dir: %v", err)
+		os.Exit(1)
+	}
 
-	statusCmd := flag.NewFlagSet("status", flag.ExitOnError)
+	multiverseBlobCacheDir := filepath.Join(userCacheDir, "multiverse", "blobs")
+	err = os.MkdirAll(multiverseBlobCacheDir, 0755)
+	if err != nil {
+		fmt.Printf("could not create cache dir: %v", err)
+		os.Exit(1)
+	}
+
+	blobStore = datastore.FileDataStore{
+		DirName: multiverseBlobCacheDir,
+	}
 
 	if len(os.Args) < 2 {
 		fmt.Println("expected command")
@@ -59,15 +79,25 @@ func main() {
 	// https://gobyexample.com/command-line-subcommands
 	switch os.Args[1] {
 	case "upload":
-		uploadCmd.Parse(os.Args[2:])
-		target := uploadCmd.Arg(0)
+		set := flag.NewFlagSet("upload", flag.ExitOnError)
+		set.Parse(os.Args[2:])
+		target := set.Arg(0)
 		hash := traverse(target, upload)
 		fmt.Printf("%s %s\n", hash, target)
 		log.Printf("http://%s/blobs/%s", apiURL, hash)
 
+	case "local":
+		set := flag.NewFlagSet("local", flag.ExitOnError)
+		set.Parse(os.Args[2:])
+		target := set.Arg(0)
+		hash := traverse(target, local)
+		fmt.Printf("%s %s\n", hash, target)
+		log.Printf("http://%s/blobs/%s", apiURL, hash)
+
 	case "status":
-		statusCmd.Parse(os.Args[2:])
-		target := statusCmd.Arg(0)
+		set := flag.NewFlagSet("status", flag.ExitOnError)
+		set.Parse(os.Args[2:])
+		target := set.Arg(0)
 		hash := traverse(target, status)
 		fmt.Printf("%s %s\n", hash, target)
 		log.Printf("http://%s/blobs/%s", apiURL, hash)
@@ -82,6 +112,10 @@ func main() {
 
 func status(node format.Node) error {
 	return nil
+}
+
+func local(node format.Node) error {
+	return blobStore.Set(context.Background(), node.Cid().String(), node.RawData())
 }
 
 func upload(node format.Node) error {
