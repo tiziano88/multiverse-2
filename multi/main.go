@@ -21,7 +21,7 @@ import (
 )
 
 var (
-	blobStore datastore.DataStore
+	blobStore datastore.NodeService
 	tagStore  datastore.DataStore
 )
 
@@ -67,8 +67,10 @@ func main() {
 		if err != nil {
 			log.Fatalf("could not create blob cache dir: %v", err)
 		}
-		blobStore = datastore.FileDataStore{
-			DirName: multiverseBlobCacheDir,
+		blobStore = datastore.Adaptor{
+			Inner: datastore.FileDataStore{
+				DirName: multiverseBlobCacheDir,
+			},
 		}
 	}
 
@@ -114,6 +116,14 @@ func main() {
 		fmt.Printf("%s %s\n", hash, target)
 		log.Printf("http://%s/blobs/%s", apiURL, hash)
 
+	case "diff":
+		set := flag.NewFlagSet("diff", flag.ExitOnError)
+		set.Parse(os.Args[2:])
+		target := set.Arg(0)
+		hash := traverse(target, status)
+		fmt.Printf("%s %s\n", hash, target)
+		log.Printf("http://%s/blobs/%s", apiURL, hash)
+
 	default:
 		log.Fatalf("invalid command: %s", os.Args[1])
 	}
@@ -121,17 +131,20 @@ func main() {
 
 func status(filename string, node format.Node) error {
 	marker := color.RedString("*")
-	ok, _ := blobStore.Has(context.Background(), node.Cid().String())
+	ok, _ := blobStore.Has(context.Background(), node.Cid())
 	if ok {
 		marker = color.GreenString("✓")
 	}
-	fmt.Printf("%s %s %s\n", color.YellowString(node.Cid().String()), marker, filename)
+	hash := node.Cid().String()
+	hash = hash[len(hash)-16:]
+	fmt.Printf("%s %s %s\n", color.YellowString(hash), marker, filename)
 	return nil
 }
 
 func local(filename string, node format.Node) error {
 	fmt.Printf("%s %s\n", node.Cid().String(), filename)
-	return blobStore.Set(context.Background(), node.Cid().String(), node.RawData())
+	_, err := blobStore.Add(context.Background(), node)
+	return err
 }
 
 func upload(filename string, node format.Node) error {

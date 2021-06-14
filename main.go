@@ -25,7 +25,7 @@ import (
 )
 
 var (
-	blobStore datastore.DataStore
+	blobStore datastore.NodeService
 	tagStore  datastore.DataStore
 
 	handlerBrowse http.Handler
@@ -66,16 +66,20 @@ func main() {
 	storageClient, err := storage.NewClient(ctx)
 	if err != nil {
 		log.Print(err)
-		blobStore = datastore.FileDataStore{
-			DirName: "data",
+		blobStore = datastore.Adaptor{
+			Inner: datastore.FileDataStore{
+				DirName: "data",
+			},
 		}
 		tagStore = datastore.FileDataStore{
 			DirName: "tags",
 		}
 	} else {
-		blobStore = datastore.CloudDataStore{
-			Client:     storageClient,
-			BucketName: blobBucketName,
+		blobStore = datastore.Adaptor{
+			Inner: datastore.CloudDataStore{
+				Client:     storageClient,
+				BucketName: blobBucketName,
+			},
 		}
 		tagStore = datastore.CloudDataStore{
 			Client:     storageClient,
@@ -172,7 +176,7 @@ func postTagHandler(c *gin.Context) {
 	}
 }
 
-func serveUI(c *gin.Context, root cid.Cid, segments []string, target cid.Cid, blob []byte) {
+func serveUI(c *gin.Context, root cid.Cid, segments []string, target cid.Cid, node format.Node) {
 	templateSegments := []TemplateSegment{}
 	for i, s := range segments {
 		templateSegments = append(templateSegments, TemplateSegment{
@@ -181,24 +185,8 @@ func serveUI(c *gin.Context, root cid.Cid, segments []string, target cid.Cid, bl
 		})
 	}
 	pathStr := c.Param("path")
-	// if !strings.HasSuffix(current, "/") {
-	// 	current += "/"
-	// }
-	switch target.Prefix().Codec {
-	case cid.DagProtobuf:
-		node, err := utils.ParseProtoNode(blob)
-		if err != nil {
-			log.Printf("could not parse manifest: %v", err)
-			c.Header("multiverse-hash", target.String())
-			ext := filepath.Ext(segments[len(segments)-1])
-			contentType := mime.TypeByExtension(ext)
-			if contentType == "" {
-				contentType = http.DetectContentType(blob)
-			}
-			c.Header("Content-Type", contentType)
-			c.Data(http.StatusOK, "", blob)
-			return
-		}
+	switch node := node.(type) {
+	case *merkledag.ProtoNode:
 		c.HTML(http.StatusOK, "browse.tmpl", gin.H{
 			"type":         "directory",
 			"wwwHost":      wwwSegment + "." + domainName,
@@ -208,7 +196,7 @@ func serveUI(c *gin.Context, root cid.Cid, segments []string, target cid.Cid, bl
 			"pathSegments": templateSegments,
 			"node":         node,
 		})
-	case cid.Raw:
+	case *merkledag.RawNode:
 		c.HTML(http.StatusOK, "browse.tmpl", gin.H{
 			"type":         "file",
 			"wwwHost":      wwwSegment + "." + domainName,
@@ -216,8 +204,8 @@ func serveUI(c *gin.Context, root cid.Cid, segments []string, target cid.Cid, bl
 			"path":         pathStr,
 			"parentPath":   path.Dir(path.Dir(pathStr)),
 			"pathSegments": templateSegments,
-			"blob":         blob,
-			"blob_str":     string(blob),
+			"blob":         node.RawData(),
+			"blob_str":     string(node.RawData()),
 		})
 	}
 }
@@ -237,25 +225,26 @@ func serveWWW(c *gin.Context, root cid.Cid, segments []string) {
 	log.Printf("target: %s", target)
 	log.Printf("target CID: %#v", target.Prefix())
 
-	blob, err := get(c, target.String())
+	node, err := blobStore.Get(c, target)
 	if err != nil {
 		log.Print(err)
 		c.Abort()
 		return
 	}
-	if target.Prefix().Codec == cid.Raw {
+	switch node := node.(type) {
+	case *merkledag.RawNode:
 		c.Header("multiverse-hash", target.String())
 		ext := filepath.Ext(segments[len(segments)-1])
 		contentType := mime.TypeByExtension(ext)
 		if contentType == "" {
-			contentType = http.DetectContentType(blob)
+			contentType = http.DetectContentType(node.RawData())
 		}
 		c.Header("Content-Type", contentType)
-		c.Data(http.StatusOK, "", blob)
+		c.Data(http.StatusOK, "", node.RawData())
 		return
-	} else if target.Prefix().Codec == cid.DagProtobuf {
-		serveUI(c, root, segments, target, blob)
-	} else {
+	case *merkledag.ProtoNode:
+		serveUI(c, root, segments, target, node)
+	default:
 		log.Printf("unknown codec: %v", target.Prefix().Codec)
 		c.AbortWithStatus(http.StatusBadRequest)
 		return
@@ -300,7 +289,6 @@ type GetResponse struct {
 func apiUpdateHandler(c *gin.Context) {
 	var req UploadRequest
 	json.NewDecoder(c.Request.Body).Decode(&req)
-	// log.Printf("req: %#v", req)
 
 	if req.Root == "" && len(req.Blobs) == 1 {
 		log.Printf("individual blob")
@@ -333,8 +321,12 @@ func apiUpdateHandler(c *gin.Context) {
 			c.AbortWithStatus(http.StatusBadRequest)
 			return
 		}
-		hash := add(c, node)
-		// c.Redirect(http.StatusFound, fmt.Sprintf("//%s%s", hash, webSuffix))
+		hash, err := blobStore.Add(c, node)
+		if err != nil {
+			log.Print(err)
+			c.AbortWithStatus(http.StatusBadRequest)
+			return
+		}
 		log.Printf("uploaded: %s", hash)
 		c.JSON(http.StatusOK, UploadResponse{
 			Root: hash.String(),
@@ -369,7 +361,12 @@ func apiUpdateHandler(c *gin.Context) {
 			c.AbortWithStatus(http.StatusNotFound)
 			return
 		}
-		newHash := add(c, newNode)
+		newHash, err := blobStore.Add(c, newNode)
+		if err != nil {
+			log.Print(err)
+			c.AbortWithStatus(http.StatusNotFound)
+			return
+		}
 		log.Printf("new hash: %s", newHash.String())
 		root, err = traverseAdd(c, root, pathSegments, newHash)
 		if err != nil {
@@ -434,51 +431,39 @@ func apiGetHandler(c *gin.Context) {
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
-	blob, err := get(c, target.String())
+	node, err := blobStore.Get(c, target)
 	if err != nil {
 		log.Print(err)
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
 	res := GetResponse{
-		Content: blob,
+		Content: node.RawData(),
 	}
 	log.Printf("res: %#v", res)
 	c.JSON(http.StatusOK, res)
-}
-
-func add(c context.Context, node format.Node) cid.Cid {
-	h := node.Cid()
-	err := blobStore.Set(c, h.String(), node.RawData())
-	if err != nil {
-		log.Fatal(err)
-	}
-	return h
-}
-
-func get(c context.Context, hash string) ([]byte, error) {
-	return blobStore.Get(c, hash)
 }
 
 func traverse(c context.Context, root cid.Cid, segments []string) (cid.Cid, error) {
 	if len(segments) == 0 {
 		return root, nil
 	} else {
-		bytes, err := get(c, root.String())
+		node, err := blobStore.Get(c, root)
 		if err != nil {
 			return cid.Undef, fmt.Errorf("could not get blob %s", root)
 		}
-		node, err := utils.ParseProtoNode(bytes)
-		if err != nil {
-			return cid.Undef, fmt.Errorf("could not parse blob %s as node", root)
+		switch node := node.(type) {
+		case *merkledag.ProtoNode:
+			head := segments[0]
+			next, err := utils.GetLink(node, head)
+			if err != nil {
+				return cid.Undef, fmt.Errorf("could not traverse %s/%s: %v", root, head, err)
+			}
+			log.Printf("next: %v", next)
+			return traverse(c, next, segments[1:])
+		default:
+			return cid.Undef, fmt.Errorf("incorrect node type")
 		}
-		head := segments[0]
-		next, err := utils.GetLink(node, head)
-		if err != nil {
-			return cid.Undef, fmt.Errorf("could not traverse %s/%s: %v", root, head, err)
-		}
-		log.Printf("next: %v", next)
-		return traverse(c, next, segments[1:])
 	}
 }
 
@@ -487,75 +472,77 @@ func traverseAdd(c context.Context, root cid.Cid, segments []string, nodeToAdd c
 	if len(segments) == 0 {
 		return nodeToAdd, nil
 	} else {
-		bytes, err := get(c, root.String())
+		node, err := blobStore.Get(c, root)
 		if err != nil {
 			return cid.Undef, fmt.Errorf("could not get blob %s", root)
 		}
-		node, err := utils.ParseProtoNode(bytes)
-		if err != nil {
-			return cid.Undef, fmt.Errorf("could not parse blob %s as manifest: %v", root, err)
-		}
-		head := segments[0]
-		var next cid.Cid
-		next, err = utils.GetLink(node, head)
-		if err == merkledag.ErrLinkNotFound {
-			// Ok
-			next = add(c, utils.NewProtoNode())
-		} else if err != nil {
-			return cid.Undef, fmt.Errorf("could not get link: %v", err)
-		}
-		log.Printf("next: %v", next)
+		switch node := node.(type) {
+		case *merkledag.ProtoNode:
+			head := segments[0]
+			var next cid.Cid
+			next, err = utils.GetLink(node, head)
+			if err == merkledag.ErrLinkNotFound {
+				// Ok
+				next, err = blobStore.Add(c, utils.NewProtoNode())
+				// TODO
+			} else if err != nil {
+				return cid.Undef, fmt.Errorf("could not get link: %v", err)
+			}
+			log.Printf("next: %v", next)
 
-		newHash, err := traverseAdd(c, next, segments[1:], nodeToAdd)
-		if err != nil {
-			return cid.Undef, fmt.Errorf("could not call recursively: %v", err)
-		}
+			newHash, err := traverseAdd(c, next, segments[1:], nodeToAdd)
+			if err != nil {
+				return cid.Undef, fmt.Errorf("could not call recursively: %v", err)
+			}
 
-		err = utils.SetLink(node, head, newHash)
-		if err != nil {
-			return cid.Undef, fmt.Errorf("could not add link: %v", err)
+			err = utils.SetLink(node, head, newHash)
+			if err != nil {
+				return cid.Undef, fmt.Errorf("could not add link: %v", err)
+			}
+			return blobStore.Add(c, node)
+		default:
+			return cid.Undef, fmt.Errorf("incorrect node type")
 		}
-		return add(c, node), nil
 	}
 }
 
 func traverseRemove(c context.Context, root cid.Cid, segments []string) (cid.Cid, error) {
 	log.Printf("traverseRemove %v/%#v", root, segments)
-	bytes, err := get(c, root.String())
+	node, err := blobStore.Get(c, root)
 	if err != nil {
-		return cid.Undef, fmt.Errorf("could not get blob %s", root)
+		return cid.Undef, fmt.Errorf("could not get node %s", root)
 	}
-	node, err := utils.ParseProtoNode(bytes)
-	if err != nil {
-		return cid.Undef, fmt.Errorf("could not parse blob %s as manifest: %v", root, err)
+	switch node := node.(type) {
+	case *merkledag.ProtoNode:
+		if len(segments) == 1 {
+			utils.RemoveLink(node, segments[0])
+		} else {
+			head := segments[0]
+			var next cid.Cid
+			next, err = utils.GetLink(node, head)
+			if err == merkledag.ErrLinkNotFound {
+				// Ok
+				next, err = blobStore.Add(c, utils.NewProtoNode())
+				// TODO
+			} else if err != nil {
+				return cid.Undef, fmt.Errorf("could not get link: %v", err)
+			}
+			log.Printf("next: %v", next)
+
+			newHash, err := traverseRemove(c, next, segments[1:])
+			if err != nil {
+				return cid.Undef, fmt.Errorf("could not call recursively: %v", err)
+			}
+
+			err = utils.SetLink(node, head, newHash)
+			if err != nil {
+				return cid.Undef, fmt.Errorf("could not add link: %v", err)
+			}
+		}
+		return blobStore.Add(c, node)
+	default:
+		return cid.Undef, nil
 	}
-
-	if len(segments) == 1 {
-		utils.RemoveLink(node, segments[0])
-	} else {
-		head := segments[0]
-		var next cid.Cid
-		next, err = utils.GetLink(node, head)
-		if err == merkledag.ErrLinkNotFound {
-			// Ok
-			next = add(c, utils.NewProtoNode())
-		} else if err != nil {
-			return cid.Undef, fmt.Errorf("could not get link: %v", err)
-		}
-		log.Printf("next: %v", next)
-
-		newHash, err := traverseRemove(c, next, segments[1:])
-		if err != nil {
-			return cid.Undef, fmt.Errorf("could not call recursively: %v", err)
-		}
-
-		err = utils.SetLink(node, head, newHash)
-		if err != nil {
-			return cid.Undef, fmt.Errorf("could not add link: %v", err)
-		}
-	}
-
-	return add(c, node), nil
 }
 
 func browseBlobHandler(c *gin.Context) {
@@ -564,10 +551,6 @@ func browseBlobHandler(c *gin.Context) {
 	segments := parsePath(pathString)
 	log.Printf("segments: %#v", segments)
 
-	// if pathString != "/" && strings.HasSuffix(pathString, "/") {
-	// 	c.Redirect(http.StatusMovedPermanently, strings.TrimSuffix(pathString, "/"))
-	// 	return
-	// }
 	if strings.HasSuffix(c.Request.URL.Path, "/") {
 		to := strings.TrimSuffix(c.Request.URL.Path, "/")
 		log.Printf("redirecting to: %q", to)
@@ -587,13 +570,13 @@ func browseBlobHandler(c *gin.Context) {
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
-	blob, err := get(c, target.String())
+	node, err := blobStore.Get(c, target)
 	if err != nil {
 		log.Print(err)
 		c.Abort()
 		return
 	}
-	serveUI(c, root, segments, target, blob)
+	serveUI(c, root, segments, target, node)
 }
 
 func renderHandler(c *gin.Context) {
@@ -615,7 +598,12 @@ func renderHandler(c *gin.Context) {
 		baseDomain := hostSegments[0]
 		log.Printf("base domain: %s", baseDomain)
 		if baseDomain == "empty" {
-			target := add(c, utils.NewProtoNode())
+			target, err := blobStore.Add(c, utils.NewProtoNode())
+			if err != nil {
+				log.Print(err)
+				c.AbortWithStatus(http.StatusNotFound)
+				return
+			}
 			log.Printf("target: %s", target.String())
 			redirectToCid(c, target, "")
 			return
