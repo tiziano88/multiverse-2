@@ -165,7 +165,7 @@ func status(filename string, node format.Node) error {
 		marker = color.GreenString("✓")
 	}
 	hash := node.Cid().String()
-	hash = hash[len(hash)-16:]
+	// hash = hash[len(hash)-16:]
 	fmt.Printf("%s %s %s\n", color.YellowString(hash), marker, filename)
 	return nil
 }
