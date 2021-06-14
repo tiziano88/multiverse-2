@@ -110,15 +110,22 @@ func main() {
 	// flag.Parse()
 }
 
-func status(node format.Node) error {
+func status(filename string, node format.Node) error {
+	marker := "-"
+	ok, _ := blobStore.Has(context.Background(), node.Cid().String())
+	if ok {
+		marker = "+"
+	}
+	fmt.Printf("%s %s %s\n", node.Cid().String(), marker, filename)
 	return nil
 }
 
-func local(node format.Node) error {
+func local(filename string, node format.Node) error {
+	fmt.Printf("%s %s\n", node.Cid().String(), filename)
 	return blobStore.Set(context.Background(), node.Cid().String(), node.RawData())
 }
 
-func upload(node format.Node) error {
+func upload(filename string, node format.Node) error {
 	localHash := node.Cid()
 	if !exists(localHash) {
 		blobType := ""
@@ -180,49 +187,97 @@ func exists(hash cid.Cid) bool {
 	return false
 }
 
-func traverse(p string, f func(format.Node) error) cid.Cid {
-	fmt.Printf(": %s\n", p)
-	files, err := ioutil.ReadDir(p)
+func traverse(p string, f func(string, format.Node) error) cid.Cid {
+	file, err := os.Open(p)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	node := utils.NewProtoNode()
+	fileInfo, err := file.Stat()
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	for _, file := range files {
-		if file.IsDir() {
-			hash := traverse(path.Join(p, file.Name()), f)
-			fmt.Printf("%s %s\n", hash, file.Name())
-			utils.SetLink(node, file.Name(), hash)
-		} else {
-			filePath := path.Join(p, file.Name())
-			bytes, err := ioutil.ReadFile(filePath)
-			if err != nil {
-				log.Fatal(err)
-			}
-			newNode, err := utils.ParseRawNode(bytes)
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			hash := node.Cid()
-			fmt.Printf("%s %s\n", hash, file.Name())
-
-			err = f(newNode)
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			utils.SetLink(node, file.Name(), newNode.Cid())
+	if fileInfo.IsDir() {
+		files, err := file.Readdir(-1)
+		if err != nil {
+			log.Fatal(err)
 		}
+
+		node := utils.NewProtoNode()
+		for _, ff := range files {
+			filePath := path.Join(p, ff.Name())
+			hash := traverse(filePath, f)
+			utils.SetLink(node, file.Name(), hash)
+		}
+
+		err = f(p, node)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		return node.Cid()
+	} else {
+		bytes, err := ioutil.ReadAll(file)
+		if err != nil {
+			log.Fatal(err)
+		}
+		node, err := utils.ParseRawNode(bytes)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		err = f(file.Name(), node)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		return node.Cid()
 	}
 
-	hash := node.Cid()
+	/*
+		files, err := ioutil.ReadDir(p)
+		if err != nil {
+			log.Fatal(err)
+		}
 
-	err = f(node)
-	if err != nil {
-		log.Fatal(err)
-	}
+		node := utils.NewProtoNode()
 
-	return hash
+		for _, file := range files {
+			if file.IsDir() {
+				hash := traverse(path.Join(p, file.Name()), f)
+				fmt.Printf("%s %s\n", hash, file.Name())
+				utils.SetLink(node, file.Name(), hash)
+			} else {
+				filePath := path.Join(p, file.Name())
+				bytes, err := ioutil.ReadFile(filePath)
+				if err != nil {
+					log.Fatal(err)
+				}
+				newNode, err := utils.ParseRawNode(bytes)
+				if err != nil {
+					log.Fatal(err)
+				}
+
+				hash := node.Cid()
+				fmt.Printf("%s %s\n", hash, file.Name())
+
+				err = f(newNode)
+				if err != nil {
+					log.Fatal(err)
+				}
+
+				utils.SetLink(node, file.Name(), newNode.Cid())
+			}
+		}
+
+		hash := node.Cid()
+
+		err = f(node)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		return hash
+	*/
 }
