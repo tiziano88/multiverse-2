@@ -12,6 +12,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 
 	"github.com/fatih/color"
 	"github.com/ipfs/go-cid"
@@ -120,12 +121,47 @@ func main() {
 	case "diff":
 		set := flag.NewFlagSet("diff", flag.ExitOnError)
 		set.Parse(os.Args[2:])
+
 		from := set.Arg(0)
+		if !strings.HasPrefix(from, "baf") {
+			hash, inMemory := buildInMemory(from)
+			blobStore = datastore.Multi{
+				Inner: []datastore.NodeService{
+					inMemory,
+					blobStore,
+				},
+			}
+			from = hash.String()
+		}
+
 		to := set.Arg(1)
+		if !strings.HasPrefix(to, "baf") {
+			hash, inMemory := buildInMemory(to)
+			blobStore = datastore.Multi{
+				Inner: []datastore.NodeService{
+					inMemory,
+					blobStore,
+				},
+			}
+			to = hash.String()
+		}
+
 		diff(from, to)
 
 	default:
 		log.Fatalf("invalid command: %s", os.Args[1])
+	}
+}
+
+func buildInMemory(path string) (cid.Cid, datastore.MapAdaptor) {
+	m := make(map[cid.Cid]format.Node)
+	f := func(filename string, node format.Node) error {
+		m[node.Cid()] = node
+		return nil
+	}
+	hash := traverse(path, f)
+	return hash, datastore.MapAdaptor{
+		Inner: m,
 	}
 }
 
@@ -138,11 +174,20 @@ func diff(from string, to string) error {
 	if err != nil {
 		return fmt.Errorf("could not decode to: %v", err)
 	}
-	d, err := diffCid(fromCid, toCid)
+	diffs, err := diffCid(fromCid, toCid)
 	if err != nil {
 		return fmt.Errorf("could not compute diff: %v", err)
 	}
-	fmt.Printf("diff: %v", d)
+	for _, d := range diffs {
+		switch d.Type {
+		case dagutils.Add:
+			fmt.Printf("+ %v\n", d.Path)
+		case dagutils.Remove:
+			fmt.Printf("- %v\n", d.Path)
+		case dagutils.Mod:
+			fmt.Printf("* %v\n", d.Path)
+		}
+	}
 	return nil
 }
 
