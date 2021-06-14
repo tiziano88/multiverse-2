@@ -22,6 +22,7 @@ import (
 
 var (
 	blobStore datastore.DataStore
+	tagStore  datastore.DataStore
 )
 
 // const apiURL = "01.plus"
@@ -57,19 +58,29 @@ type GetResponse struct {
 func main() {
 	userCacheDir, err := os.UserCacheDir()
 	if err != nil {
-		fmt.Printf("could not get cache dir: %v", err)
-		os.Exit(1)
+		log.Fatalf("could not get user cache dir: %v", err)
 	}
 
-	multiverseBlobCacheDir := filepath.Join(userCacheDir, "multiverse", "blobs")
-	err = os.MkdirAll(multiverseBlobCacheDir, 0755)
-	if err != nil {
-		fmt.Printf("could not create cache dir: %v", err)
-		os.Exit(1)
+	{
+		multiverseBlobCacheDir := filepath.Join(userCacheDir, "multiverse", "blobs")
+		err = os.MkdirAll(multiverseBlobCacheDir, 0755)
+		if err != nil {
+			log.Fatalf("could not create blob cache dir: %v", err)
+		}
+		blobStore = datastore.FileDataStore{
+			DirName: multiverseBlobCacheDir,
+		}
 	}
 
-	blobStore = datastore.FileDataStore{
-		DirName: multiverseBlobCacheDir,
+	{
+		multiverseTagsCacheDir := filepath.Join(userCacheDir, "multiverse", "tags")
+		err = os.MkdirAll(multiverseTagsCacheDir, 0755)
+		if err != nil {
+			log.Fatalf("could not create tag cache dir: %v", err)
+		}
+		tagStore = datastore.FileDataStore{
+			DirName: multiverseTagsCacheDir,
+		}
 	}
 
 	if len(os.Args) < 2 {
@@ -104,8 +115,7 @@ func main() {
 		log.Printf("http://%s/blobs/%s", apiURL, hash)
 
 	default:
-		fmt.Println("invalid command: ", os.Args[1])
-		os.Exit(1)
+		log.Fatalf("invalid command: %s", os.Args[1])
 	}
 
 	// flag.Parse()
