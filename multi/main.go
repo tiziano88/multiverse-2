@@ -16,6 +16,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/ipfs/go-cid"
 	format "github.com/ipfs/go-ipld-format"
+	"github.com/ipfs/go-merkledag/dagutils"
 	"github.com/tiziano88/multiverse/datastore"
 	"github.com/tiziano88/multiverse/utils"
 )
@@ -119,14 +120,42 @@ func main() {
 	case "diff":
 		set := flag.NewFlagSet("diff", flag.ExitOnError)
 		set.Parse(os.Args[2:])
-		target := set.Arg(0)
-		hash := traverse(target, status)
-		fmt.Printf("%s %s\n", hash, target)
-		log.Printf("http://%s/blobs/%s", apiURL, hash)
+		from := set.Arg(0)
+		to := set.Arg(1)
+		diff(from, to)
 
 	default:
 		log.Fatalf("invalid command: %s", os.Args[1])
 	}
+}
+
+func diff(from string, to string) error {
+	fromCid, err := cid.Decode(from)
+	if err != nil {
+		return fmt.Errorf("could not decode from: %v", err)
+	}
+	toCid, err := cid.Decode(to)
+	if err != nil {
+		return fmt.Errorf("could not decode to: %v", err)
+	}
+	d, err := diffCid(fromCid, toCid)
+	if err != nil {
+		return fmt.Errorf("could not compute diff: %v", err)
+	}
+	fmt.Printf("diff: %v", d)
+	return nil
+}
+
+func diffCid(from cid.Cid, to cid.Cid) ([]*dagutils.Change, error) {
+	fromNode, err := blobStore.Get(context.Background(), from)
+	if err != nil {
+		return nil, fmt.Errorf("could not get from: %v", err)
+	}
+	toNode, err := blobStore.Get(context.Background(), to)
+	if err != nil {
+		return nil, fmt.Errorf("could not get to: %v", err)
+	}
+	return dagutils.Diff(context.TODO(), blobStore, fromNode, toNode)
 }
 
 func status(filename string, node format.Node) error {
@@ -143,7 +172,7 @@ func status(filename string, node format.Node) error {
 
 func local(filename string, node format.Node) error {
 	fmt.Printf("%s %s\n", node.Cid().String(), filename)
-	_, err := blobStore.Add(context.Background(), node)
+	err := blobStore.Add(context.Background(), node)
 	return err
 }
 

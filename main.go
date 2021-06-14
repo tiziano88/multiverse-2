@@ -321,15 +321,15 @@ func apiUpdateHandler(c *gin.Context) {
 			c.AbortWithStatus(http.StatusBadRequest)
 			return
 		}
-		hash, err := blobStore.Add(c, node)
+		err = blobStore.Add(c, node)
 		if err != nil {
 			log.Print(err)
 			c.AbortWithStatus(http.StatusBadRequest)
 			return
 		}
-		log.Printf("uploaded: %s", hash)
+		log.Printf("uploaded: %s", node.Cid().String())
 		c.JSON(http.StatusOK, UploadResponse{
-			Root: hash.String(),
+			Root: node.Cid().String(),
 		})
 		return
 	}
@@ -361,14 +361,14 @@ func apiUpdateHandler(c *gin.Context) {
 			c.AbortWithStatus(http.StatusNotFound)
 			return
 		}
-		newHash, err := blobStore.Add(c, newNode)
+		err := blobStore.Add(c, newNode)
 		if err != nil {
 			log.Print(err)
 			c.AbortWithStatus(http.StatusNotFound)
 			return
 		}
-		log.Printf("new hash: %s", newHash.String())
-		root, err = traverseAdd(c, root, pathSegments, newHash)
+		log.Printf("new hash: %s", newNode.Cid().String())
+		root, err = traverseAdd(c, root, pathSegments, newNode.Cid())
 		if err != nil {
 			log.Print(err)
 			c.AbortWithStatus(http.StatusNotFound)
@@ -483,8 +483,10 @@ func traverseAdd(c context.Context, root cid.Cid, segments []string, nodeToAdd c
 			next, err = utils.GetLink(node, head)
 			if err == merkledag.ErrLinkNotFound {
 				// Ok
-				next, err = blobStore.Add(c, utils.NewProtoNode())
+				newNode := utils.NewProtoNode()
+				err = blobStore.Add(c, newNode)
 				// TODO
+				next = node.Cid()
 			} else if err != nil {
 				return cid.Undef, fmt.Errorf("could not get link: %v", err)
 			}
@@ -499,7 +501,7 @@ func traverseAdd(c context.Context, root cid.Cid, segments []string, nodeToAdd c
 			if err != nil {
 				return cid.Undef, fmt.Errorf("could not add link: %v", err)
 			}
-			return blobStore.Add(c, node)
+			return node.Cid(), blobStore.Add(c, node)
 		default:
 			return cid.Undef, fmt.Errorf("incorrect node type")
 		}
@@ -522,8 +524,11 @@ func traverseRemove(c context.Context, root cid.Cid, segments []string) (cid.Cid
 			next, err = utils.GetLink(node, head)
 			if err == merkledag.ErrLinkNotFound {
 				// Ok
-				next, err = blobStore.Add(c, utils.NewProtoNode())
+				newNode := utils.NewProtoNode()
+				err = blobStore.Add(c, newNode)
 				// TODO
+				next = newNode.Cid()
+
 			} else if err != nil {
 				return cid.Undef, fmt.Errorf("could not get link: %v", err)
 			}
@@ -539,7 +544,7 @@ func traverseRemove(c context.Context, root cid.Cid, segments []string) (cid.Cid
 				return cid.Undef, fmt.Errorf("could not add link: %v", err)
 			}
 		}
-		return blobStore.Add(c, node)
+		return node.Cid(), blobStore.Add(c, node)
 	default:
 		return cid.Undef, nil
 	}
@@ -598,12 +603,14 @@ func renderHandler(c *gin.Context) {
 		baseDomain := hostSegments[0]
 		log.Printf("base domain: %s", baseDomain)
 		if baseDomain == "empty" {
-			target, err := blobStore.Add(c, utils.NewProtoNode())
+			newNode := utils.NewProtoNode()
+			err := blobStore.Add(c, newNode)
 			if err != nil {
 				log.Print(err)
 				c.AbortWithStatus(http.StatusNotFound)
 				return
 			}
+			target := newNode.Cid()
 			log.Printf("target: %s", target.String())
 			redirectToCid(c, target, "")
 			return

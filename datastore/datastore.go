@@ -84,8 +84,9 @@ func (s CloudDataStore) Has(ctx context.Context, name string) (bool, error) {
 // https://github.com/ipfs/go-ipld-format/blob/579737706ba5da3e550111621e2ab1bf122ed53f/merkledag.go
 type NodeService interface {
 	Has(context.Context, cid.Cid) (bool, error)
-	Get(context.Context, cid.Cid) (format.Node, error)
-	Add(context.Context, format.Node) (cid.Cid, error)
+	// Get(context.Context, cid.Cid) (format.Node, error)
+	// Add(context.Context, format.Node) error
+	format.DAGService
 }
 
 type Adaptor struct {
@@ -111,7 +112,23 @@ func (s Adaptor) Get(ctx context.Context, hash cid.Cid) (format.Node, error) {
 	}
 }
 
-func (s Adaptor) Add(ctx context.Context, node format.Node) (cid.Cid, error) {
+func (s Adaptor) GetMany(ctx context.Context, hashes []cid.Cid) <-chan *format.NodeOption {
+	return nil
+}
+
+func (s Adaptor) Add(ctx context.Context, node format.Node) error {
 	err := s.Inner.Set(ctx, node.Cid().String(), node.RawData())
-	return node.Cid(), err
+	return err
+}
+
+func (s Adaptor) AddMany(ctx context.Context, nodes []format.Node) error {
+	return fmt.Errorf("not implemented")
+}
+
+func (s Adaptor) Remove(ctx context.Context, hash cid.Cid) error {
+	return fmt.Errorf("not implemented")
+}
+
+func (s Adaptor) RemoveMany(ctx context.Context, hashes []cid.Cid) error {
+	return fmt.Errorf("not implemented")
 }
