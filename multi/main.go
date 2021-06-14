@@ -111,10 +111,10 @@ func main() {
 }
 
 func status(filename string, node format.Node) error {
-	marker := "-"
+	marker := "*"
 	ok, _ := blobStore.Has(context.Background(), node.Cid().String())
 	if ok {
-		marker = "+"
+		marker = "✓"
 	}
 	fmt.Printf("%s %s %s\n", node.Cid().String(), marker, filename)
 	return nil
@@ -208,10 +208,10 @@ func traverse(p string, f func(string, format.Node) error) cid.Cid {
 		for _, ff := range files {
 			filePath := path.Join(p, ff.Name())
 			hash := traverse(filePath, f)
-			utils.SetLink(node, file.Name(), hash)
+			utils.SetLink(node, ff.Name(), hash)
 		}
 
-		err = f(p, node)
+		err = f(file.Name(), node)
 		if err != nil {
 			log.Fatal(err)
 		}
