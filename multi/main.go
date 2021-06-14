@@ -13,6 +13,7 @@ import (
 	"path"
 	"path/filepath"
 
+	"github.com/fatih/color"
 	"github.com/ipfs/go-cid"
 	format "github.com/ipfs/go-ipld-format"
 	"github.com/tiziano88/multiverse/datastore"
@@ -111,12 +112,12 @@ func main() {
 }
 
 func status(filename string, node format.Node) error {
-	marker := "*"
+	marker := color.RedString("*")
 	ok, _ := blobStore.Has(context.Background(), node.Cid().String())
 	if ok {
-		marker = "✓"
+		marker = color.GreenString("✓")
 	}
-	fmt.Printf("%s %s %s\n", node.Cid().String(), marker, filename)
+	fmt.Printf("%s %s %s\n", color.YellowString(node.Cid().String()), marker, filename)
 	return nil
 }
 
