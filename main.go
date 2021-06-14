@@ -35,7 +35,7 @@ const blobBucketName = "multiverse-312721.appspot.com"
 const tagBucketName = "multiverse-312721-key"
 
 const wwwSegment = "www"
-const tagSegment = "tag"
+const tagsSegment = "tags"
 
 var domainName = "localhost:8080"
 
@@ -597,7 +597,6 @@ func browseBlobHandler(c *gin.Context) {
 
 func renderHandler(c *gin.Context) {
 	hostSegments := hostSegments(c.Request.Host)
-	log.Printf("host segments: %v", hostSegments)
 	pathString := c.Param("path")
 	log.Printf("path: %v", pathString)
 	segments := parsePath(pathString)
@@ -610,45 +609,43 @@ func renderHandler(c *gin.Context) {
 	root := cid.Undef
 	var err error
 
-	if len(hostSegments) == 2 {
-		switch hostSegments[1] {
-		case wwwSegment:
-			baseDomain := hostSegments[0]
-			log.Printf("base domain: %s", baseDomain)
-			if baseDomain == "empty" {
-				target := add(c, utils.NewProtoNode())
-				log.Printf("target: %s", target.String())
-				redirectToCid(c, target, "")
-				return
-			}
-
-			root, err = cid.Decode(baseDomain)
-			if err != nil {
-				log.Print(err)
-				c.AbortWithStatus(http.StatusNotFound)
-				return
-			}
-			log.Printf("root: %v", root)
-		case tagSegment:
-			tagValueBytes, err := tagStore.Get(c, hostSegments[0])
-			if err != nil {
-				log.Print(err)
-				c.AbortWithStatus(http.StatusInternalServerError)
-				return
-			}
-			tagValue, err := cid.Decode(string(tagValueBytes))
-			if err != nil {
-				log.Print(err)
-				c.AbortWithStatus(http.StatusInternalServerError)
-				return
-			}
-			serveWWW(c, tagValue, segments)
-			return
-		default:
-			log.Printf("invalid segment")
-			c.AbortWithStatus(http.StatusBadRequest)
+	switch hostSegments[1] {
+	case wwwSegment:
+		baseDomain := hostSegments[0]
+		log.Printf("base domain: %s", baseDomain)
+		if baseDomain == "empty" {
+			target := add(c, utils.NewProtoNode())
+			log.Printf("target: %s", target.String())
+			redirectToCid(c, target, "")
 			return
 		}
+
+		root, err = cid.Decode(baseDomain)
+		if err != nil {
+			log.Print(err)
+			c.AbortWithStatus(http.StatusNotFound)
+			return
+		}
+		log.Printf("root: %v", root)
+	case tagsSegment:
+		tagValueBytes, err := tagStore.Get(c, hostSegments[0])
+		if err != nil {
+			log.Print(err)
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+		tagValue, err := cid.Decode(string(tagValueBytes))
+		if err != nil {
+			log.Print(err)
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+		serveWWW(c, tagValue, segments)
+		return
+	default:
+		log.Printf("invalid segment")
+		c.AbortWithStatus(http.StatusBadRequest)
+		return
 	}
 
 	serveWWW(c, root, segments)
