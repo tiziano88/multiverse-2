@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	"path"
 
 	"github.com/ipfs/go-cid"
@@ -46,14 +47,44 @@ type GetResponse struct {
 }
 
 func main() {
-	flag.Parse()
-	target := flag.Arg(0)
-	hash := traverse(target)
-	fmt.Printf("%s %s\n", hash, target)
-	log.Printf("http://%s/blobs/%s", apiURL, hash)
+	uploadCmd := flag.NewFlagSet("upload", flag.ExitOnError)
+
+	statusCmd := flag.NewFlagSet("status", flag.ExitOnError)
+
+	if len(os.Args) < 2 {
+		fmt.Println("expected command")
+		os.Exit(1)
+	}
+
+	// https://gobyexample.com/command-line-subcommands
+	switch os.Args[1] {
+	case "upload":
+		uploadCmd.Parse(os.Args[2:])
+		target := uploadCmd.Arg(0)
+		hash := traverse(target, upload)
+		fmt.Printf("%s %s\n", hash, target)
+		log.Printf("http://%s/blobs/%s", apiURL, hash)
+
+	case "status":
+		statusCmd.Parse(os.Args[2:])
+		target := statusCmd.Arg(0)
+		hash := traverse(target, status)
+		fmt.Printf("%s %s\n", hash, target)
+		log.Printf("http://%s/blobs/%s", apiURL, hash)
+
+	default:
+		fmt.Println("invalid command: ", os.Args[1])
+		os.Exit(1)
+	}
+
+	// flag.Parse()
 }
 
-func upload(node format.Node) (cid.Cid, error) {
+func status(node format.Node) error {
+	return nil
+}
+
+func upload(node format.Node) error {
 	localHash := node.Cid()
 	if !exists(localHash) {
 		blobType := ""
@@ -77,21 +108,21 @@ func upload(node format.Node) (cid.Cid, error) {
 		json.NewEncoder(&buf).Encode(r)
 		res, err := http.Post("http://"+apiURL+"/api/update", "", &buf)
 		if err != nil {
-			return cid.Undef, fmt.Errorf("could not POST request: %v", err)
+			return fmt.Errorf("could not POST request: %v", err)
 		}
 		resJson := UploadResponse{}
 		err = json.NewDecoder(res.Body).Decode(&resJson)
 		if err != nil {
-			return cid.Undef, fmt.Errorf("could not read response body: %v", err)
+			return fmt.Errorf("could not read response body: %v", err)
 		}
 		log.Printf("uploaded: %#v", resJson)
 		remoteHash := resJson.Root
 		if localHash.String() != remoteHash {
-			return cid.Undef, fmt.Errorf("hash mismatch; local: %s, remote: %s", localHash, remoteHash)
+			return fmt.Errorf("hash mismatch; local: %s, remote: %s", localHash, remoteHash)
 		}
 		log.Printf("http://%s/blobs/%s", apiURL, localHash)
 	}
-	return localHash, nil
+	return nil
 }
 
 func exists(hash cid.Cid) bool {
@@ -115,7 +146,7 @@ func exists(hash cid.Cid) bool {
 	return false
 }
 
-func traverse(p string) cid.Cid {
+func traverse(p string, f func(format.Node) error) cid.Cid {
 	fmt.Printf(": %s\n", p)
 	files, err := ioutil.ReadDir(p)
 	if err != nil {
@@ -126,7 +157,7 @@ func traverse(p string) cid.Cid {
 
 	for _, file := range files {
 		if file.IsDir() {
-			hash := traverse(path.Join(p, file.Name()))
+			hash := traverse(path.Join(p, file.Name()), f)
 			fmt.Printf("%s %s\n", hash, file.Name())
 			utils.SetLink(node, file.Name(), hash)
 		} else {
@@ -140,17 +171,21 @@ func traverse(p string) cid.Cid {
 				log.Fatal(err)
 			}
 
-			hash, err := upload(newNode)
+			hash := node.Cid()
+			fmt.Printf("%s %s\n", hash, file.Name())
+
+			err = f(newNode)
 			if err != nil {
 				log.Fatal(err)
 			}
 
-			fmt.Printf("%s %s\n", hash, file.Name())
 			utils.SetLink(node, file.Name(), newNode.Cid())
 		}
 	}
 
-	hash, err := upload(node)
+	hash := node.Cid()
+
+	err = f(node)
 	if err != nil {
 		log.Fatal(err)
 	}

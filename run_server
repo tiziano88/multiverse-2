@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# shellcheck disable=SC2034  # Unused variables OK as this script is `source`d.
 
 set -o errexit
 set -o nounset
