@@ -117,8 +117,6 @@ func main() {
 	default:
 		log.Fatalf("invalid command: %s", os.Args[1])
 	}
-
-	// flag.Parse()
 }
 
 func status(filename string, node format.Node) error {
@@ -218,8 +216,12 @@ func traverse(p string, f func(string, format.Node) error) cid.Cid {
 		node := utils.NewProtoNode()
 		for _, ff := range files {
 			filePath := path.Join(p, ff.Name())
-			hash := traverse(filePath, f)
-			utils.SetLink(node, ff.Name(), hash)
+			if ignore(filePath) {
+				// Nothing
+			} else {
+				hash := traverse(filePath, f)
+				utils.SetLink(node, ff.Name(), hash)
+			}
 		}
 
 		err = f(file.Name(), node)
@@ -245,4 +247,8 @@ func traverse(p string, f func(string, format.Node) error) cid.Cid {
 
 		return node.Cid()
 	}
+}
+
+func ignore(p string) bool {
+	return filepath.Base(p) == ".git"
 }
