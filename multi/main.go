@@ -75,27 +75,49 @@ func main() {
 	case "push":
 		set := flag.NewFlagSet("push", flag.ExitOnError)
 		remoteURL := set.String("url", "", "URL of the remote to push to [01.plus, localhost:8080]")
+
 		set.Parse(os.Args[2:])
+
 		if *remoteURL == "" {
 			init_local()
 		} else {
 			init_remote(*remoteURL)
 		}
+
 		target := set.Arg(0)
-		hash := traverse(target, push)
+		hash := traverse(target, "", push)
 		fmt.Printf("%s %s\n", hash, target)
 		// log.Printf("http://%s/blobs/%s", apiURL, hash)
 
 	case "status":
 		set := flag.NewFlagSet("status", flag.ExitOnError)
+		remoteURL := set.String("url", "", "URL of the remote to push to [01.plus, localhost:8080]")
+
 		set.Parse(os.Args[2:])
+
+		if *remoteURL == "" {
+			init_local()
+		} else {
+			init_remote(*remoteURL)
+		}
+
 		target := set.Arg(0)
-		hash := traverse(target, status)
+		if target == "" {
+			target = "."
+		}
+		hash := traverse(target, "", status)
 		fmt.Printf("%s %s\n", hash, target)
 
 	case "diff":
 		set := flag.NewFlagSet("diff", flag.ExitOnError)
 		set.Parse(os.Args[2:])
+
+		if set.NArg() != 2 {
+			fmt.Println("usage")
+			fmt.Println("multi diff <from> <to>")
+			fmt.Println("<from> and <to> are either local file paths, or multiverse hashes")
+			os.Exit(1)
+		}
 
 		from := set.Arg(0)
 		if !strings.HasPrefix(from, "baf") {
@@ -134,7 +156,7 @@ func buildInMemory(path string) (cid.Cid, nodeservice.InMemory) {
 		m[node.Cid()] = node
 		return nil
 	}
-	hash := traverse(path, f)
+	hash := traverse(path, "", f)
 	return hash, nodeservice.InMemory{
 		Inner: m,
 	}
@@ -206,8 +228,8 @@ func exists(hash cid.Cid) bool {
 	return ok
 }
 
-func traverse(p string, f func(string, format.Node) error) cid.Cid {
-	file, err := os.Open(p)
+func traverse(base string, relativeFilename string, f func(string, format.Node) error) cid.Cid {
+	file, err := os.Open(path.Join(base, relativeFilename))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -225,16 +247,16 @@ func traverse(p string, f func(string, format.Node) error) cid.Cid {
 
 		node := utils.NewProtoNode()
 		for _, ff := range files {
-			filePath := path.Join(p, ff.Name())
-			if ignore(filePath) {
+			newRelativeFilename := path.Join(relativeFilename, ff.Name())
+			if ignore(newRelativeFilename) {
 				// Nothing
 			} else {
-				hash := traverse(filePath, f)
+				hash := traverse(base, newRelativeFilename, f)
 				utils.SetLink(node, ff.Name(), hash)
 			}
 		}
 
-		err = f(file.Name(), node)
+		err = f(relativeFilename, node)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -252,7 +274,7 @@ func traverse(p string, f func(string, format.Node) error) cid.Cid {
 			log.Fatal(err)
 		}
 
-		err = f(file.Name(), node)
+		err = f(relativeFilename, node)
 		if err != nil {
 			log.Fatal(err)
 		}
