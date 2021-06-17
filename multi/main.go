@@ -317,6 +317,8 @@ func traverse(p string, f func(string, format.Node) error) cid.Cid {
 		}
 
 		return node.Cid()
+		// } else if fileInfo.Mode() == os.ModeSymlink {
+		// skip
 	} else {
 		bytes, err := ioutil.ReadAll(file)
 		if err != nil {
