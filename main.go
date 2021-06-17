@@ -20,12 +20,13 @@ import (
 	format "github.com/ipfs/go-ipld-format"
 	"github.com/ipfs/go-merkledag"
 	"github.com/tiziano88/multiverse/datastore"
+	"github.com/tiziano88/multiverse/nodeservice"
 	"github.com/tiziano88/multiverse/utils"
 	"google.golang.org/appengine"
 )
 
 var (
-	blobStore datastore.NodeService
+	blobStore nodeservice.NodeService
 	tagStore  datastore.DataStore
 
 	handlerBrowse http.Handler
@@ -66,22 +67,22 @@ func main() {
 	storageClient, err := storage.NewClient(ctx)
 	if err != nil {
 		log.Print(err)
-		blobStore = datastore.Adaptor{
-			Inner: datastore.FileDataStore{
+		blobStore = nodeservice.DataStore{
+			Inner: datastore.File{
 				DirName: "data",
 			},
 		}
-		tagStore = datastore.FileDataStore{
+		tagStore = datastore.File{
 			DirName: "tags",
 		}
 	} else {
-		blobStore = datastore.Adaptor{
-			Inner: datastore.CloudDataStore{
+		blobStore = nodeservice.DataStore{
+			Inner: datastore.Cloud{
 				Client:     storageClient,
 				BucketName: blobBucketName,
 			},
 		}
-		tagStore = datastore.CloudDataStore{
+		tagStore = datastore.Cloud{
 			Client:     storageClient,
 			BucketName: tagBucketName,
 		}

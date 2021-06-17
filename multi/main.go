@@ -1,14 +1,11 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
-	"net/http"
 	"os"
 	"path"
 	"path/filepath"
@@ -19,45 +16,18 @@ import (
 	format "github.com/ipfs/go-ipld-format"
 	"github.com/ipfs/go-merkledag/dagutils"
 	"github.com/tiziano88/multiverse/datastore"
+	"github.com/tiziano88/multiverse/nodeservice"
 	"github.com/tiziano88/multiverse/utils"
 )
 
 var (
-	blobStore datastore.NodeService
+	blobStore nodeservice.NodeService
 	tagStore  datastore.DataStore
 )
 
-// const apiURL = "01.plus"
+// const webURL = "www." + apiURL
 
-const apiURL = "localhost:8080"
-
-const webURL = "www." + apiURL
-
-type UploadRequest struct {
-	Root  string
-	Blobs []UploadBlob
-}
-
-type UploadBlob struct {
-	Type    string // file | directory
-	Path    string
-	Content []byte
-}
-
-type UploadResponse struct {
-	Root string
-}
-
-type GetRequest struct {
-	Root string
-	Path string
-}
-
-type GetResponse struct {
-	Content []byte
-}
-
-func main() {
+func init_local() {
 	userCacheDir, err := os.UserCacheDir()
 	if err != nil {
 		log.Fatalf("could not get user cache dir: %v", err)
@@ -69,8 +39,8 @@ func main() {
 		if err != nil {
 			log.Fatalf("could not create blob cache dir: %v", err)
 		}
-		blobStore = datastore.Adaptor{
-			Inner: datastore.FileDataStore{
+		blobStore = nodeservice.DataStore{
+			Inner: datastore.File{
 				DirName: multiverseBlobCacheDir,
 			},
 		}
@@ -82,11 +52,19 @@ func main() {
 		if err != nil {
 			log.Fatalf("could not create tag cache dir: %v", err)
 		}
-		tagStore = datastore.FileDataStore{
+		tagStore = datastore.File{
 			DirName: multiverseTagsCacheDir,
 		}
 	}
+}
 
+func init_remote(apiURL string) {
+	blobStore = nodeservice.Remote{
+		APIURL: apiURL,
+	}
+}
+
+func main() {
 	if len(os.Args) < 2 {
 		fmt.Println("expected command")
 		os.Exit(1)
@@ -94,21 +72,19 @@ func main() {
 
 	// https://gobyexample.com/command-line-subcommands
 	switch os.Args[1] {
-	case "upload":
-		set := flag.NewFlagSet("upload", flag.ExitOnError)
+	case "push":
+		set := flag.NewFlagSet("push", flag.ExitOnError)
+		remoteURL := set.String("url", "", "URL of the remote to push to [01.plus, localhost:8080]")
 		set.Parse(os.Args[2:])
+		if *remoteURL == "" {
+			init_local()
+		} else {
+			init_remote(*remoteURL)
+		}
 		target := set.Arg(0)
-		hash := traverse(target, upload)
+		hash := traverse(target, push)
 		fmt.Printf("%s %s\n", hash, target)
-		log.Printf("http://%s/blobs/%s", apiURL, hash)
-
-	case "local":
-		set := flag.NewFlagSet("local", flag.ExitOnError)
-		set.Parse(os.Args[2:])
-		target := set.Arg(0)
-		hash := traverse(target, local)
-		fmt.Printf("%s %s\n", hash, target)
-		log.Printf("http://%s/blobs/%s", apiURL, hash)
+		// log.Printf("http://%s/blobs/%s", apiURL, hash)
 
 	case "status":
 		set := flag.NewFlagSet("status", flag.ExitOnError)
@@ -116,7 +92,6 @@ func main() {
 		target := set.Arg(0)
 		hash := traverse(target, status)
 		fmt.Printf("%s %s\n", hash, target)
-		log.Printf("http://%s/blobs/%s", apiURL, hash)
 
 	case "diff":
 		set := flag.NewFlagSet("diff", flag.ExitOnError)
@@ -125,8 +100,8 @@ func main() {
 		from := set.Arg(0)
 		if !strings.HasPrefix(from, "baf") {
 			hash, inMemory := buildInMemory(from)
-			blobStore = datastore.Multi{
-				Inner: []datastore.NodeService{
+			blobStore = nodeservice.Multiplex{
+				Inner: []nodeservice.NodeService{
 					inMemory,
 					blobStore,
 				},
@@ -137,8 +112,8 @@ func main() {
 		to := set.Arg(1)
 		if !strings.HasPrefix(to, "baf") {
 			hash, inMemory := buildInMemory(to)
-			blobStore = datastore.Multi{
-				Inner: []datastore.NodeService{
+			blobStore = nodeservice.Multiplex{
+				Inner: []nodeservice.NodeService{
 					inMemory,
 					blobStore,
 				},
@@ -153,14 +128,14 @@ func main() {
 	}
 }
 
-func buildInMemory(path string) (cid.Cid, datastore.MapAdaptor) {
+func buildInMemory(path string) (cid.Cid, nodeservice.InMemory) {
 	m := make(map[cid.Cid]format.Node)
 	f := func(filename string, node format.Node) error {
 		m[node.Cid()] = node
 		return nil
 	}
 	hash := traverse(path, f)
-	return hash, datastore.MapAdaptor{
+	return hash, nodeservice.InMemory{
 		Inner: m,
 	}
 }
@@ -215,72 +190,20 @@ func status(filename string, node format.Node) error {
 	return nil
 }
 
-func local(filename string, node format.Node) error {
-	fmt.Printf("%s %s\n", node.Cid().String(), filename)
-	err := blobStore.Add(context.Background(), node)
-	return err
-}
-
-func upload(filename string, node format.Node) error {
+func push(filename string, node format.Node) error {
 	localHash := node.Cid()
 	if !exists(localHash) {
-		blobType := ""
-		switch localHash.Prefix().Codec {
-		case cid.Raw:
-			blobType = "file"
-		case cid.DagProtobuf:
-			blobType = "directory"
-		}
-		r := UploadRequest{
-			Root: "",
-			Blobs: []UploadBlob{
-				{
-					Type:    blobType,
-					Path:    "",
-					Content: node.RawData(),
-				},
-			},
-		}
-		buf := bytes.Buffer{}
-		json.NewEncoder(&buf).Encode(r)
-		res, err := http.Post("http://"+apiURL+"/api/update", "", &buf)
-		if err != nil {
-			return fmt.Errorf("could not POST request: %v", err)
-		}
-		resJson := UploadResponse{}
-		err = json.NewDecoder(res.Body).Decode(&resJson)
-		if err != nil {
-			return fmt.Errorf("could not read response body: %v", err)
-		}
-		log.Printf("uploaded: %#v", resJson)
-		remoteHash := resJson.Root
-		if localHash.String() != remoteHash {
-			return fmt.Errorf("hash mismatch; local: %s, remote: %s", localHash, remoteHash)
-		}
-		log.Printf("http://%s/blobs/%s", apiURL, localHash)
+		return blobStore.Add(context.Background(), node)
 	}
 	return nil
 }
 
 func exists(hash cid.Cid) bool {
-	r := GetRequest{
-		Root: hash.String(),
-		Path: "",
-	}
-	buf := bytes.Buffer{}
-	json.NewEncoder(&buf).Encode(r)
-	res, err := http.Post("http://"+apiURL+"/api/get", "", &buf)
+	ok, err := blobStore.Has(context.Background(), hash)
 	if err != nil {
 		log.Fatal(err)
 	}
-	if res.StatusCode == http.StatusOK {
-		return true
-	}
-	if res.StatusCode == http.StatusNotFound {
-		return false
-	}
-	log.Fatalf("invalid status: %s %d", res.Status, res.StatusCode)
-	return false
+	return ok
 }
 
 func traverse(p string, f func(string, format.Node) error) cid.Cid {
