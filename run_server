@@ -5,4 +5,4 @@ set -o nounset
 set -o xtrace
 set -o pipefail
 
-go run *.go
+go run main.go
