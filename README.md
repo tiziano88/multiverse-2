@@ -16,6 +16,17 @@ In order to run the server locally, use the following command:
 
 The Multiverse CLI offers a way to operate on files on the local file system and sync them to one or more Multiverse servers or local directories.
 
+The CLI relies on a local configuration file at `~/.config/multiverse.toml`, which should contain a list of remotes, e.g.:
+
+```toml
+default_remote = local
+
+[remotes.local]
+path = "~/.cache/multiverse"
+
+[remotes.01]
+url = "https://01.plus"
+```
 
 The CLI can be built and installed with the following command:
 

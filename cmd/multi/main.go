@@ -42,49 +42,46 @@ var (
 )
 
 type Config struct {
-	Remotes map[string]Remote
+	DefaultRemote string `toml:"default_remote"`
+	Remotes       map[string]Remote
 }
 
 type Remote struct {
-	URL string
+	Path string
+	URL  string
 }
 
-// const webURL = "www." + apiURL
-
-func init_local() {
-	userCacheDir, err := os.UserCacheDir()
-	if err != nil {
-		log.Fatalf("could not get user cache dir: %v", err)
-	}
-
-	{
-		multiverseBlobCacheDir := filepath.Join(userCacheDir, "multiverse", "blobs")
-		err = os.MkdirAll(multiverseBlobCacheDir, 0755)
-		if err != nil {
-			log.Fatalf("could not create blob cache dir: %v", err)
+func init_remote(remote Remote) {
+	if remote.URL != "" {
+		blobStore = nodeservice.Remote{
+			APIURL: remote.URL,
 		}
-		blobStore = nodeservice.DataStore{
-			Inner: datastore.File{
-				DirName: multiverseBlobCacheDir,
-			},
-		}
-	}
+	} else if remote.Path != "" {
+		baseDir := remote.Path
 
-	{
-		multiverseTagsCacheDir := filepath.Join(userCacheDir, "multiverse", "tags")
-		err = os.MkdirAll(multiverseTagsCacheDir, 0755)
-		if err != nil {
-			log.Fatalf("could not create tag cache dir: %v", err)
+		{
+			multiverseBlobCacheDir := filepath.Join(baseDir, "blobs")
+			err := os.MkdirAll(multiverseBlobCacheDir, 0755)
+			if err != nil {
+				log.Fatalf("could not create blob cache dir: %v", err)
+			}
+			blobStore = nodeservice.DataStore{
+				Inner: datastore.File{
+					DirName: multiverseBlobCacheDir,
+				},
+			}
 		}
-		tagStore = datastore.File{
-			DirName: multiverseTagsCacheDir,
-		}
-	}
-}
 
-func init_remote(apiURL string) {
-	blobStore = nodeservice.Remote{
-		APIURL: apiURL,
+		{
+			multiverseTagsCacheDir := filepath.Join(baseDir, "tags")
+			err := os.MkdirAll(multiverseTagsCacheDir, 0755)
+			if err != nil {
+				log.Fatalf("could not create tag cache dir: %v", err)
+			}
+			tagStore = datastore.File{
+				DirName: multiverseTagsCacheDir,
+			}
+		}
 	}
 }
 
@@ -115,15 +112,18 @@ func main() {
 	switch os.Args[1] {
 	case "push":
 		set := flag.NewFlagSet("push", flag.ExitOnError)
-		remoteURL := set.String("url", "", "URL of the remote to push to [01.plus, localhost:8080]")
-
+		remoteName := set.String("remote", "", "name of the remote to push to")
 		set.Parse(os.Args[2:])
 
-		if *remoteURL == "" {
-			init_local()
-		} else {
-			init_remote(*remoteURL)
+		if *remoteName == "" && config.DefaultRemote != "" {
+			*remoteName = config.DefaultRemote
 		}
+
+		remote, ok := config.Remotes[*remoteName]
+		if !ok {
+			log.Fatalf("Invalid remote name: %q", *remoteName)
+		}
+		init_remote(remote)
 
 		target := set.Arg(0)
 		hash := traverse(target, "", push)
@@ -132,15 +132,18 @@ func main() {
 
 	case "status":
 		set := flag.NewFlagSet("status", flag.ExitOnError)
-		remoteURL := set.String("url", "", "URL of the remote to push to [01.plus, localhost:8080]")
-
+		remoteName := set.String("remote", "", "name of the remote to push to")
 		set.Parse(os.Args[2:])
 
-		if *remoteURL == "" {
-			init_local()
-		} else {
-			init_remote(*remoteURL)
+		if *remoteName == "" && config.DefaultRemote != "" {
+			*remoteName = config.DefaultRemote
 		}
+
+		remote, ok := config.Remotes[*remoteName]
+		if !ok {
+			log.Fatalf("Invalid remote name: %q", *remoteName)
+		}
+		init_remote(remote)
 
 		target := set.Arg(0)
 		if target == "" {
