@@ -26,6 +26,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/BurntSushi/toml"
 	"github.com/fatih/color"
 	"github.com/ipfs/go-cid"
 	format "github.com/ipfs/go-ipld-format"
@@ -39,6 +40,14 @@ var (
 	blobStore nodeservice.NodeService
 	tagStore  datastore.DataStore
 )
+
+type Config struct {
+	Remotes map[string]Remote
+}
+
+type Remote struct {
+	URL string
+}
 
 // const webURL = "www." + apiURL
 
@@ -84,6 +93,23 @@ func main() {
 		fmt.Println("expected command")
 		os.Exit(1)
 	}
+
+	s, err := os.UserConfigDir()
+	if err != nil {
+		log.Fatalf("could not load config dir: %v", err)
+	}
+	s = filepath.Join(s, "multiverse.toml")
+	f, err := ioutil.ReadFile(s)
+	if err != nil {
+		log.Printf("could not read config: %v", err)
+		// Continue anyways.
+	}
+	config := Config{}
+	err = toml.Unmarshal(f, &config)
+	if err != nil {
+		log.Fatalf("could not parse config: %v", err)
+	}
+	log.Printf("parsed config: %#v", config)
 
 	// https://gobyexample.com/command-line-subcommands
 	switch os.Args[1] {
