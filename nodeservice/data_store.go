@@ -29,16 +29,16 @@ type DataStore struct {
 	Inner datastore.DataStore
 }
 
-func (s DataStore) Has(ctx context.Context, hash cid.Cid) (bool, error) {
-	return s.Inner.Has(ctx, hash.String())
+func (s DataStore) Has(ctx context.Context, c cid.Cid) (bool, error) {
+	return s.Inner.Has(ctx, utils.Hash(c))
 }
 
-func (s DataStore) Get(ctx context.Context, hash cid.Cid) (format.Node, error) {
-	bytes, err := s.Inner.Get(ctx, hash.String())
+func (s DataStore) Get(ctx context.Context, c cid.Cid) (format.Node, error) {
+	bytes, err := s.Inner.Get(ctx, utils.Hash(c))
 	if err != nil {
 		return nil, err
 	}
-	switch hash.Prefix().Codec {
+	switch c.Prefix().Codec {
 	case cid.DagProtobuf:
 		return utils.ParseProtoNode(bytes)
 	case cid.Raw:
@@ -48,12 +48,12 @@ func (s DataStore) Get(ctx context.Context, hash cid.Cid) (format.Node, error) {
 	}
 }
 
-func (s DataStore) GetMany(ctx context.Context, hashes []cid.Cid) <-chan *format.NodeOption {
+func (s DataStore) GetMany(ctx context.Context, cc []cid.Cid) <-chan *format.NodeOption {
 	return nil
 }
 
 func (s DataStore) Add(ctx context.Context, node format.Node) error {
-	err := s.Inner.Set(ctx, node.Cid().String(), node.RawData())
+	err := s.Inner.Set(ctx, utils.Hash(node.Cid()), node.RawData())
 	return err
 }
 
@@ -61,10 +61,10 @@ func (s DataStore) AddMany(ctx context.Context, nodes []format.Node) error {
 	return fmt.Errorf("not implemented")
 }
 
-func (s DataStore) Remove(ctx context.Context, hash cid.Cid) error {
+func (s DataStore) Remove(ctx context.Context, c cid.Cid) error {
 	return fmt.Errorf("not implemented")
 }
 
-func (s DataStore) RemoveMany(ctx context.Context, hashes []cid.Cid) error {
+func (s DataStore) RemoveMany(ctx context.Context, cc []cid.Cid) error {
 	return fmt.Errorf("not implemented")
 }

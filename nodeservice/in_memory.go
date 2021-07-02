@@ -27,13 +27,13 @@ type InMemory struct {
 	Inner map[cid.Cid]format.Node
 }
 
-func (s InMemory) Has(ctx context.Context, hash cid.Cid) (bool, error) {
-	_, ok := s.Inner[hash]
+func (s InMemory) Has(ctx context.Context, c cid.Cid) (bool, error) {
+	_, ok := s.Inner[c]
 	return ok, nil
 }
 
-func (s InMemory) Get(ctx context.Context, hash cid.Cid) (format.Node, error) {
-	node, ok := s.Inner[hash]
+func (s InMemory) Get(ctx context.Context, c cid.Cid) (format.Node, error) {
+	node, ok := s.Inner[c]
 	if ok {
 		return node, nil
 	} else {
@@ -41,7 +41,7 @@ func (s InMemory) Get(ctx context.Context, hash cid.Cid) (format.Node, error) {
 	}
 }
 
-func (s InMemory) GetMany(ctx context.Context, hashes []cid.Cid) <-chan *format.NodeOption {
+func (s InMemory) GetMany(ctx context.Context, cc []cid.Cid) <-chan *format.NodeOption {
 	return nil
 }
 
@@ -54,10 +54,10 @@ func (s InMemory) AddMany(ctx context.Context, nodes []format.Node) error {
 	return fmt.Errorf("not implemented")
 }
 
-func (s InMemory) Remove(ctx context.Context, hash cid.Cid) error {
+func (s InMemory) Remove(ctx context.Context, c cid.Cid) error {
 	return fmt.Errorf("not implemented")
 }
 
-func (s InMemory) RemoveMany(ctx context.Context, hashes []cid.Cid) error {
+func (s InMemory) RemoveMany(ctx context.Context, cc []cid.Cid) error {
 	return fmt.Errorf("not implemented")
 }

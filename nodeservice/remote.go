@@ -25,6 +25,7 @@ import (
 
 	"github.com/ipfs/go-cid"
 	format "github.com/ipfs/go-ipld-format"
+	"github.com/tiziano88/multiverse/utils"
 )
 
 type Remote struct {
@@ -55,9 +56,9 @@ type GetResponse struct {
 	Content []byte
 }
 
-func (s Remote) Has(ctx context.Context, hash cid.Cid) (bool, error) {
+func (s Remote) Has(ctx context.Context, c cid.Cid) (bool, error) {
 	r := GetRequest{
-		Root: hash.String(),
+		Root: utils.Hash(c),
 		Path: "",
 	}
 	buf := bytes.Buffer{}
@@ -75,11 +76,11 @@ func (s Remote) Has(ctx context.Context, hash cid.Cid) (bool, error) {
 	return false, fmt.Errorf("invalid status code: %d", res.StatusCode)
 }
 
-func (s Remote) Get(ctx context.Context, hash cid.Cid) (format.Node, error) {
+func (s Remote) Get(ctx context.Context, c cid.Cid) (format.Node, error) {
 	return nil, fmt.Errorf("not found")
 }
 
-func (s Remote) GetMany(ctx context.Context, hashes []cid.Cid) <-chan *format.NodeOption {
+func (s Remote) GetMany(ctx context.Context, cc []cid.Cid) <-chan *format.NodeOption {
 	return nil
 }
 
@@ -124,10 +125,10 @@ func (s Remote) AddMany(ctx context.Context, nodes []format.Node) error {
 	return fmt.Errorf("not implemented")
 }
 
-func (s Remote) Remove(ctx context.Context, hash cid.Cid) error {
+func (s Remote) Remove(ctx context.Context, c cid.Cid) error {
 	return fmt.Errorf("not implemented")
 }
 
-func (s Remote) RemoveMany(ctx context.Context, hashes []cid.Cid) error {
+func (s Remote) RemoveMany(ctx context.Context, cc []cid.Cid) error {
 	return fmt.Errorf("not implemented")
 }

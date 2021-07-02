@@ -27,9 +27,9 @@ type Multiplex struct {
 	Inner []NodeService
 }
 
-func (s Multiplex) Has(ctx context.Context, hash cid.Cid) (bool, error) {
+func (s Multiplex) Has(ctx context.Context, c cid.Cid) (bool, error) {
 	for _, i := range s.Inner {
-		ok, _ := i.Has(ctx, hash)
+		ok, _ := i.Has(ctx, c)
 		if ok {
 			return ok, nil
 		}
@@ -37,9 +37,9 @@ func (s Multiplex) Has(ctx context.Context, hash cid.Cid) (bool, error) {
 	return false, nil
 }
 
-func (s Multiplex) Get(ctx context.Context, hash cid.Cid) (format.Node, error) {
+func (s Multiplex) Get(ctx context.Context, c cid.Cid) (format.Node, error) {
 	for _, i := range s.Inner {
-		node, err := i.Get(ctx, hash)
+		node, err := i.Get(ctx, c)
 		if err != nil {
 			continue
 		}
@@ -48,7 +48,7 @@ func (s Multiplex) Get(ctx context.Context, hash cid.Cid) (format.Node, error) {
 	return nil, fmt.Errorf("not found")
 }
 
-func (s Multiplex) GetMany(ctx context.Context, hashes []cid.Cid) <-chan *format.NodeOption {
+func (s Multiplex) GetMany(ctx context.Context, cc []cid.Cid) <-chan *format.NodeOption {
 	return nil
 }
 
@@ -60,10 +60,10 @@ func (s Multiplex) AddMany(ctx context.Context, nodes []format.Node) error {
 	return fmt.Errorf("not implemented")
 }
 
-func (s Multiplex) Remove(ctx context.Context, hash cid.Cid) error {
+func (s Multiplex) Remove(ctx context.Context, c cid.Cid) error {
 	return fmt.Errorf("not implemented")
 }
 
-func (s Multiplex) RemoveMany(ctx context.Context, hashes []cid.Cid) error {
+func (s Multiplex) RemoveMany(ctx context.Context, cc []cid.Cid) error {
 	return fmt.Errorf("not implemented")
 }

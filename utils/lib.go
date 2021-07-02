@@ -16,6 +16,8 @@
 package utils
 
 import (
+	"encoding/hex"
+
 	"github.com/ipfs/go-cid"
 	format "github.com/ipfs/go-ipld-format"
 	"github.com/ipfs/go-merkledag"
@@ -61,4 +63,9 @@ func SetLink(node *merkledag.ProtoNode, name string, hash cid.Cid) error {
 
 func RemoveLink(node *merkledag.ProtoNode, name string) error {
 	return node.RemoveNodeLink(name)
+}
+
+func Hash(c cid.Cid) string {
+	return hex.EncodeToString([]byte(c.Hash()))
+	// return c.Hash().B58String()
 }
