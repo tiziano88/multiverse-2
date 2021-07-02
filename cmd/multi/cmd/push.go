@@ -7,9 +7,13 @@ import (
 )
 
 var pushCmd = &cobra.Command{
-	Use: "push",
+	Use:  "push",
+	Args: cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		target := args[0]
+		target := "."
+		if len(args) > 0 {
+			target = args[0]
+		}
 		hash := traverse(target, "", push)
 		fmt.Printf("%s %s\n", hash, target)
 	},

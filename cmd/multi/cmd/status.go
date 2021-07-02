@@ -7,11 +7,12 @@ import (
 )
 
 var statusCmd = &cobra.Command{
-	Use: "status",
+	Use:  "status",
+	Args: cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		target := args[0]
-		if target == "" {
-			target = "."
+		target := "."
+		if len(args) > 0 {
+			target = args[0]
 		}
 		hash := traverse(target, "", status)
 		fmt.Printf("%s %s\n", hash, target)
