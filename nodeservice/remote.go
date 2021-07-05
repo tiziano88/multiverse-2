@@ -63,7 +63,7 @@ func (s Remote) Has(ctx context.Context, c cid.Cid) (bool, error) {
 	}
 	buf := bytes.Buffer{}
 	json.NewEncoder(&buf).Encode(r)
-	res, err := http.Post("http://"+s.APIURL+"/api/get", "", &buf)
+	res, err := http.Post(s.APIURL+"/api/get", "", &buf)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -104,7 +104,7 @@ func (s Remote) Add(ctx context.Context, node format.Node) error {
 	}
 	buf := bytes.Buffer{}
 	json.NewEncoder(&buf).Encode(r)
-	res, err := http.Post("http://"+s.APIURL+"/api/update", "", &buf)
+	res, err := http.Post(s.APIURL+"/api/update", "", &buf)
 	if err != nil {
 		return fmt.Errorf("could not POST request: %v", err)
 	}

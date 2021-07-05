@@ -19,7 +19,7 @@ The Multiverse CLI offers a way to operate on files on the local file system and
 The CLI relies on a local configuration file at `~/.config/multiverse.toml`, which should contain a list of remotes, e.g.:
 
 ```toml
-default_remote = local
+default_remote = "local"
 
 [remotes.local]
 path = "~/.cache/multiverse"
