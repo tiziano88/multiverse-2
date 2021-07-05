@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )
 
@@ -21,7 +22,7 @@ var tagsCmd = &cobra.Command{
 			if err != nil {
 				log.Fatalf("could not list tags: %v", err)
 			}
-			fmt.Printf("%s %s\n", tagValue, tag)
+			fmt.Printf("%s %s\n", color.YellowString(string(tagValue)), tag)
 		}
 	},
 }
