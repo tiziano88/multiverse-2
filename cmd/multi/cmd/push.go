@@ -3,7 +3,10 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"log"
 
+	"github.com/ipfs/go-cid"
+	format "github.com/ipfs/go-ipld-format"
 	"github.com/spf13/cobra"
 	"github.com/tiziano88/multiverse/utils"
 )
@@ -22,4 +25,20 @@ var pushCmd = &cobra.Command{
 			tagStore.Set(context.Background(), tagName, []byte(utils.Hash(hash)))
 		}
 	},
+}
+
+func push(filename string, node format.Node) error {
+	localHash := node.Cid()
+	if !exists(localHash) {
+		return blobStore.Add(context.Background(), node)
+	}
+	return nil
+}
+
+func exists(hash cid.Cid) bool {
+	ok, err := blobStore.Has(context.Background(), hash)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return ok
 }
