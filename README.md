@@ -22,11 +22,13 @@ The CLI relies on a local configuration file at `~/.config/multiverse.toml`, whi
 default_remote = "local"
 
 [remotes.local]
-path = "~/.cache/multiverse"
+path = "/home/tzn/.cache/multiverse"
 
 [remotes.01]
 url = "https://01.plus"
 ```
+
+Note that `~` and env variables are **not** expanded.
 
 The CLI can be built and installed with the following command:
 
