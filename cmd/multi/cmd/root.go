@@ -17,12 +17,13 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/tiziano88/multiverse/datastore"
 	"github.com/tiziano88/multiverse/nodeservice"
+	"github.com/tiziano88/multiverse/tagstore"
 	"github.com/tiziano88/multiverse/utils"
 )
 
 var (
 	blobStore nodeservice.NodeService
-	tagStore  datastore.DataStore
+	tagStore  tagstore.TagStore
 )
 
 type Config struct {
@@ -62,7 +63,7 @@ func InitRemote(remote Remote) {
 			if err != nil {
 				log.Fatalf("could not create tag cache dir: %v", err)
 			}
-			tagStore = datastore.File{
+			tagStore = tagstore.File{
 				DirName: multiverseTagsCacheDir,
 			}
 		}
@@ -120,6 +121,7 @@ func init() {
 	rootCmd.AddCommand(diffCmd)
 	rootCmd.AddCommand(pushCmd)
 	rootCmd.AddCommand(statusCmd)
+	rootCmd.AddCommand(tagsCmd)
 }
 
 func traverse(base string, relativeFilename string, f func(string, format.Node) error) cid.Cid {
