@@ -88,7 +88,7 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			log.Fatalf("could not parse config: %v", err)
 		}
-		log.Printf("parsed config: %#v", config)
+		// log.Printf("parsed config: %#v", config)
 
 		if remoteName == "" && config.DefaultRemote != "" {
 			remoteName = config.DefaultRemote
