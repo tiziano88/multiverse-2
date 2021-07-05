@@ -107,10 +107,15 @@ func Execute() {
 	}
 }
 
-var remoteName string
+var (
+	remoteName string
+	tagName    string
+)
 
 func init() {
 	rootCmd.PersistentFlags().StringVar(&remoteName, "remote", "", "")
+
+	pushCmd.Flags().StringVar(&tagName, "tag", "", "")
 
 	rootCmd.AddCommand(diffCmd)
 	rootCmd.AddCommand(pushCmd)
