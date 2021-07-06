@@ -48,12 +48,12 @@ var pullCmd = &cobra.Command{
 			log.Printf("%s\n", fullPath)
 			switch node := node.(type) {
 			case *merkledag.ProtoNode:
-				err := os.MkdirAll(fullPath, 0777)
+				err := os.MkdirAll(fullPath, 0755)
 				if err != nil {
 					log.Fatalf("could not create directory %q: %v", fullPath, err)
 				}
 			case *merkledag.RawNode:
-				err := ioutil.WriteFile(fullPath, node.RawData(), 0666)
+				err := ioutil.WriteFile(fullPath, node.RawData(), 0644)
 				if err != nil {
 					log.Fatalf("could not create file %q: %v", fullPath, err)
 				}
