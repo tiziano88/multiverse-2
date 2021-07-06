@@ -2,6 +2,8 @@
 
 Multiverse is a universal, general purpose, Content-Addressable Store (CAS) to publish and serve static content at Internet scale.
 
+This is not an officially supported Google product
+
 ## Server
 
 The Multiverse server exposes an HTTP API to allow clients to push and pull individual nodes, identified by their hash.
