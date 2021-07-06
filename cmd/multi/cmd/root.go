@@ -114,6 +114,7 @@ func init() {
 
 	pushCmd.Flags().StringVar(&tagName, "tag", "", "")
 
+	rootCmd.AddCommand(catCmd)
 	rootCmd.AddCommand(diffCmd)
 	rootCmd.AddCommand(pullCmd)
 	rootCmd.AddCommand(pushCmd)
