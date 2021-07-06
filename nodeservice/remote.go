@@ -58,7 +58,7 @@ type GetResponse struct {
 
 func (s Remote) Has(ctx context.Context, c cid.Cid) (bool, error) {
 	r := GetRequest{
-		Root: utils.Hash(c),
+		Root: c.String(),
 		Path: "",
 	}
 	buf := bytes.Buffer{}
@@ -77,7 +77,37 @@ func (s Remote) Has(ctx context.Context, c cid.Cid) (bool, error) {
 }
 
 func (s Remote) Get(ctx context.Context, c cid.Cid) (format.Node, error) {
-	return nil, fmt.Errorf("not found")
+	r := GetRequest{
+		Root: c.String(),
+		Path: "",
+	}
+	buf := bytes.Buffer{}
+	json.NewEncoder(&buf).Encode(r)
+	res, err := http.Post(s.APIURL+"/api/get", "", &buf)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if res.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("not found")
+	}
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("error: %v", res.Status)
+	}
+
+	response := GetResponse{}
+	err = json.NewDecoder(res.Body).Decode(&response)
+	if err != nil {
+		return nil, err
+	}
+
+	switch c.Prefix().Codec {
+	case cid.DagProtobuf:
+		return utils.ParseProtoNode(response.Content)
+	case cid.Raw:
+		return utils.ParseRawNode(response.Content)
+	default:
+		return nil, fmt.Errorf("invalid codec")
+	}
 }
 
 func (s Remote) GetMany(ctx context.Context, cc []cid.Cid) <-chan *format.NodeOption {
