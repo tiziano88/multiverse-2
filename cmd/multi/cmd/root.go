@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/tiziano88/multiverse/datastore"
 	"github.com/tiziano88/multiverse/nodeservice"
+	"github.com/tiziano88/multiverse/objectstore"
 	"github.com/tiziano88/multiverse/tagstore"
 	"github.com/tiziano88/multiverse/utils"
 )
@@ -47,8 +48,10 @@ func InitRemote(remote Remote) {
 				log.Fatalf("could not create blob cache dir: %v", err)
 			}
 			blobStore = nodeservice.DataStore{
-				Inner: datastore.File{
-					DirName: multiverseBlobCacheDir,
+				Inner: objectstore.Store{
+					Inner: datastore.File{
+						DirName: multiverseBlobCacheDir,
+					},
 				},
 			}
 		}

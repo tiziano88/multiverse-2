@@ -28,8 +28,11 @@ func status(filename string, node format.Node) error {
 	if ok {
 		marker = color.GreenString("✓")
 	}
-	hash := node.Cid().String()
 	// hash = hash[len(hash)-16:]
-	fmt.Printf("%s %s %s\n", color.YellowString(hash), marker, filename)
+	c := node.Cid().String()
+	fmt.Printf("%s %s %s\n", color.YellowString(c), marker, filename)
+	// h := node.Cid().Hash()
+	// fmt.Printf("%s %s %s\n", color.YellowString(h.HexString()), marker, filename)
+	// fmt.Printf("%s %s %s\n", color.YellowString(h.B58String()), marker, filename)
 	return nil
 }

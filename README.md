@@ -4,6 +4,14 @@ Multiverse is a universal, general purpose, Content-Addressable Store (CAS) to p
 
 This is not an officially supported Google product
 
+## Object Store
+
+At its core, Multiverse can store and retrieve uninterpreted bytes (called objects) by their hash.
+
+## Node Service
+
+TODO
+
 ## Server
 
 The Multiverse server exposes an HTTP API to allow clients to push and pull individual nodes, identified by their hash.

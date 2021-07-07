@@ -21,10 +21,26 @@ import (
 
 	"github.com/ipfs/go-cid"
 	format "github.com/ipfs/go-ipld-format"
+	"github.com/multiformats/go-multihash"
 )
 
 type Multiplex struct {
 	Inner []NodeService
+}
+
+func (s Multiplex) GetObject(ctx context.Context, h multihash.Multihash) ([]byte, error) {
+	for _, i := range s.Inner {
+		b, err := i.GetObject(ctx, h)
+		if err != nil {
+			continue
+		}
+		return b, nil
+	}
+	return nil, fmt.Errorf("not found")
+}
+
+func (s Multiplex) AddObject(ctx context.Context, b []byte) (multihash.Multihash, error) {
+	return s.Inner[0].AddObject(ctx, b)
 }
 
 func (s Multiplex) Has(ctx context.Context, c cid.Cid) (bool, error) {

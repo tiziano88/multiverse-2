@@ -25,6 +25,7 @@ import (
 
 	"github.com/ipfs/go-cid"
 	format "github.com/ipfs/go-ipld-format"
+	"github.com/multiformats/go-multihash"
 	"github.com/tiziano88/multiverse/utils"
 )
 
@@ -54,6 +55,60 @@ type GetRequest struct {
 
 type GetResponse struct {
 	Content []byte
+}
+
+func (s Remote) GetObject(ctx context.Context, h multihash.Multihash) ([]byte, error) {
+	r := utils.ObjectsGetRequest{
+		Hash: h.HexString(),
+	}
+	buf := bytes.Buffer{}
+	json.NewEncoder(&buf).Encode(r)
+	res, err := http.Post(s.APIURL+"/api/objects/get", "", &buf)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if res.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("not found")
+	}
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("error: %v", res.Status)
+	}
+
+	response := utils.ObjectsGetResponse{}
+	err = json.NewDecoder(res.Body).Decode(&response)
+	if err != nil {
+		return nil, err
+	}
+	return response.Content, nil
+}
+
+func (s Remote) AddObject(ctx context.Context, b []byte) (multihash.Multihash, error) {
+	r := utils.ObjectsUpdateRequest{
+		Content: b,
+	}
+	buf := bytes.Buffer{}
+	json.NewEncoder(&buf).Encode(r)
+	res, err := http.Post(s.APIURL+"/api/objects/update", "", &buf)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if res.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("not found")
+	}
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("error: %v", res.Status)
+	}
+
+	response := utils.ObjectsUpdateResponse{}
+	err = json.NewDecoder(res.Body).Decode(&response)
+	if err != nil {
+		return nil, err
+	}
+	h, err := multihash.FromHexString(response.Hash)
+	if err != nil {
+		return nil, err
+	}
+	return h, nil
 }
 
 func (s Remote) Has(ctx context.Context, c cid.Cid) (bool, error) {

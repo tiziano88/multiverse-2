@@ -10,7 +10,9 @@ import (
 	format "github.com/ipfs/go-ipld-format"
 	"github.com/ipfs/go-merkledag/dagutils"
 	"github.com/spf13/cobra"
+	"github.com/tiziano88/multiverse/datastore"
 	"github.com/tiziano88/multiverse/nodeservice"
+	"github.com/tiziano88/multiverse/objectstore"
 )
 
 var diffCmd = &cobra.Command{
@@ -52,16 +54,20 @@ var diffCmd = &cobra.Command{
 	},
 }
 
-func buildInMemory(path string) (cid.Cid, nodeservice.InMemory) {
-	m := make(map[cid.Cid]format.Node)
+func buildInMemory(path string) (cid.Cid, nodeservice.DataStore) {
+	s := nodeservice.DataStore{
+		Inner: objectstore.Store{
+			Inner: datastore.InMemory{
+				Inner: make(map[string][]byte),
+			},
+		},
+	}
 	f := func(filename string, node format.Node) error {
-		m[node.Cid()] = node
+		// TODO
 		return nil
 	}
 	hash := traverse(path, "", f)
-	return hash, nodeservice.InMemory{
-		Inner: m,
-	}
+	return hash, s
 }
 
 func diff(from string, to string) error {

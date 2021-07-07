@@ -21,7 +21,24 @@ import (
 	"github.com/ipfs/go-cid"
 	format "github.com/ipfs/go-ipld-format"
 	"github.com/ipfs/go-merkledag"
+	"github.com/multiformats/go-multihash"
 )
+
+type ObjectsGetRequest struct {
+	Hash string
+}
+
+type ObjectsGetResponse struct {
+	Content []byte
+}
+
+type ObjectsUpdateRequest struct {
+	Content []byte
+}
+
+type ObjectsUpdateResponse struct {
+	Hash string
+}
 
 func NewProtoNode() *merkledag.ProtoNode {
 	node := merkledag.ProtoNode{}
@@ -68,4 +85,8 @@ func RemoveLink(node *merkledag.ProtoNode, name string) error {
 func Hash(c cid.Cid) string {
 	return hex.EncodeToString([]byte(c.Hash()))
 	// return c.Hash().B58String()
+}
+
+func ParseHash(s string) (multihash.Multihash, error) {
+	return multihash.FromHexString(s)
 }

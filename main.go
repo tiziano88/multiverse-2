@@ -34,8 +34,10 @@ import (
 	"github.com/ipfs/go-cid"
 	format "github.com/ipfs/go-ipld-format"
 	"github.com/ipfs/go-merkledag"
+	"github.com/multiformats/go-multihash"
 	"github.com/tiziano88/multiverse/datastore"
 	"github.com/tiziano88/multiverse/nodeservice"
+	"github.com/tiziano88/multiverse/objectstore"
 	"github.com/tiziano88/multiverse/utils"
 	"google.golang.org/appengine"
 )
@@ -83,8 +85,10 @@ func main() {
 	if err != nil {
 		log.Print(err)
 		blobStore = nodeservice.DataStore{
-			Inner: datastore.File{
-				DirName: "data",
+			Inner: objectstore.Store{
+				Inner: datastore.File{
+					DirName: "data",
+				},
 			},
 		}
 		tagStore = datastore.File{
@@ -92,9 +96,11 @@ func main() {
 		}
 	} else {
 		blobStore = nodeservice.DataStore{
-			Inner: datastore.Cloud{
-				Client:     storageClient,
-				BucketName: blobBucketName,
+			Inner: objectstore.Store{
+				Inner: datastore.Cloud{
+					Client:     storageClient,
+					BucketName: blobBucketName,
+				},
 			},
 		}
 		tagStore = datastore.Cloud{
@@ -108,6 +114,10 @@ func main() {
 		router.RedirectTrailingSlash = false
 		router.RedirectFixedPath = false
 		router.LoadHTMLGlob("templates/*")
+
+		// Uninterpreted bytes by hash, no DAG traversal.
+		router.POST("/api/objects/get", apiObjectsGetHandler)
+		router.POST("/api/objects/update", apiObjectsUpdateHandler)
 
 		router.POST("/api/get", apiGetHandler)
 		router.POST("/api/update", apiUpdateHandler)
@@ -424,6 +434,60 @@ func apiRemoveHandler(c *gin.Context) {
 	}
 	res := UploadResponse{
 		Root: hash.String(),
+	}
+	log.Printf("res: %#v", res)
+	c.JSON(http.StatusOK, res)
+}
+
+func apiObjectsGetHandler(c *gin.Context) {
+	var req utils.ObjectsGetRequest
+	json.NewDecoder(c.Request.Body).Decode(&req)
+	log.Printf("req: %#v", req)
+
+	hash, err := utils.ParseHash(req.Hash)
+	if err != nil {
+		log.Print(err)
+		c.AbortWithStatus(http.StatusBadRequest)
+		return
+	}
+	decodedHash, err := multihash.Decode(hash)
+	if err != nil {
+		log.Print(err)
+		c.AbortWithStatus(http.StatusBadRequest)
+		return
+	}
+	if decodedHash.Code != multihash.SHA2_256 {
+		log.Print(err)
+		c.AbortWithStatus(http.StatusBadRequest)
+		return
+	}
+	node, err := blobStore.GetObject(c, hash)
+	if err != nil {
+		log.Print(err)
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	res := utils.ObjectsGetResponse{
+		Content: node,
+	}
+	log.Printf("res: %#v", res)
+	c.JSON(http.StatusOK, res)
+}
+
+func apiObjectsUpdateHandler(c *gin.Context) {
+	var req utils.ObjectsUpdateRequest
+	json.NewDecoder(c.Request.Body).Decode(&req)
+	log.Printf("req: %#v", req)
+
+	h, err := blobStore.AddObject(c, req.Content)
+	if err != nil {
+		log.Print(err)
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
+
+	res := utils.ObjectsUpdateResponse{
+		Hash: h.HexString(),
 	}
 	log.Printf("res: %#v", res)
 	c.JSON(http.StatusOK, res)

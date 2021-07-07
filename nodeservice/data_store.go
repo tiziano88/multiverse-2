@@ -21,20 +21,32 @@ import (
 
 	"github.com/ipfs/go-cid"
 	format "github.com/ipfs/go-ipld-format"
-	"github.com/tiziano88/multiverse/datastore"
+	"github.com/multiformats/go-multihash"
+	"github.com/tiziano88/multiverse/objectstore"
 	"github.com/tiziano88/multiverse/utils"
 )
 
+const hashType = multihash.SHA2_256
+
 type DataStore struct {
-	Inner datastore.DataStore
+	Inner objectstore.Store
+}
+
+func (s DataStore) GetObject(ctx context.Context, h multihash.Multihash) ([]byte, error) {
+	return s.Inner.Get(ctx, h)
+}
+
+func (s DataStore) AddObject(ctx context.Context, b []byte) (multihash.Multihash, error) {
+	return s.Inner.Add(ctx, b)
 }
 
 func (s DataStore) Has(ctx context.Context, c cid.Cid) (bool, error) {
-	return s.Inner.Has(ctx, utils.Hash(c))
+	_, err := s.Inner.Get(ctx, c.Hash())
+	return err == nil, nil
 }
 
 func (s DataStore) Get(ctx context.Context, c cid.Cid) (format.Node, error) {
-	bytes, err := s.Inner.Get(ctx, utils.Hash(c))
+	bytes, err := s.Inner.Get(ctx, c.Hash())
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +65,7 @@ func (s DataStore) GetMany(ctx context.Context, cc []cid.Cid) <-chan *format.Nod
 }
 
 func (s DataStore) Add(ctx context.Context, node format.Node) error {
-	err := s.Inner.Set(ctx, utils.Hash(node.Cid()), node.RawData())
+	_, err := s.Inner.Add(ctx, node.RawData())
 	return err
 }
 
