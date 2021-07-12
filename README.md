@@ -1,20 +1,20 @@
-# Multiverse
+# Ent
 
-Multiverse is a universal, general purpose, Content-Addressable Store (CAS) to publish and serve static content at Internet scale.
+Ent is an experimental universal, general purpose, Content-Addressable Store (CAS) to explore transparency logs, policies and graph structures.
 
-This is not an officially supported Google product
+This is not an officially supported Google product.
 
 ## Object Store
 
-At its core, Multiverse can store and retrieve uninterpreted bytes (called objects) by their hash.
+At its core, Ent can store and retrieve uninterpreted bytes (called objects) by their hash.
 
-## Node Service
+## DAG Service
 
 TODO
 
 ## Server
 
-The Multiverse server exposes an HTTP API to allow clients to push and pull individual nodes, identified by their hash.
+The Ent server exposes an HTTP API to allow clients to push and pull individual nodes, identified by their hash.
 
 In order to run the server locally, use the following command:
 
@@ -24,7 +24,7 @@ In order to run the server locally, use the following command:
 
 ## Command-Line Interface
 
-The Multiverse CLI offers a way to operate on files on the local file system and sync them to one or more Multiverse servers or local directories.
+The Ent CLI offers a way to operate on files on the local file system and sync them to one or more Ent servers or local directories.
 
 The CLI relies on a local configuration file at `~/.config/multiverse.toml`, which should contain a list of remotes, e.g.:
 
