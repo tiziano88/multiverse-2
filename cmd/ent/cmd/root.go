@@ -60,6 +60,22 @@ func parsePlan(filename string) (Plan, error) {
 	return plan, nil
 }
 
+func parseIgnore(targetDir string) *ignore.GitIgnore {
+	filename := filepath.Join(targetDir, ".gitignore")
+	_, err := os.Stat(filename)
+	if os.IsNotExist(err) {
+		return &ignore.GitIgnore{}
+	} else if err != nil {
+		log.Panic(err)
+	}
+
+	i, err := ignore.CompileIgnoreFile(filename)
+	if err != nil {
+		log.Panic(err)
+	}
+	return i
+}
+
 func InitRemote(remote Remote) {
 	if remote.URL != "" {
 		blobStore = nodeservice.Remote{

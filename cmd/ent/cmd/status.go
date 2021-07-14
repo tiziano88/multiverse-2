@@ -8,7 +8,6 @@ import (
 
 	"github.com/fatih/color"
 	format "github.com/ipfs/go-ipld-format"
-	ignore "github.com/sabhiram/go-gitignore"
 	"github.com/spf13/cobra"
 )
 
@@ -25,10 +24,7 @@ var statusCmd = &cobra.Command{
 			log.Panic(err)
 		}
 		fmt.Printf("%#v\n", plan)
-		i, err := ignore.CompileIgnoreFile(filepath.Join(target, ".gitignore"))
-		if err != nil {
-			log.Panic(err)
-		}
+		i := parseIgnore(target)
 		traverse(target, "", i, status)
 	},
 }

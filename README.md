@@ -77,7 +77,7 @@ path = "example"
 from = "bafybeie46l4ev3o5jvzsuuwdnrp3z45522crey6oaauilgimvlyngokoxm"
 
 [[overrides]]
-path = "cmd"
+path = "test/cmd"
 from = "bafybeidglc4sbje2sbrfmr6ukt2db5alsg3annuwzjlj3pjpyqh2vh2go4"
 ```
 
@@ -86,6 +86,8 @@ that path from a remote.
 
 For each entry, `ent make` creates the directory at the specified path (if not
 already existing) and recursively pulls the specified node into it.
+
+Directories not specified in `entplan.toml` are left unaffected.
 
 It is conceptually similar to
 [git submodules](https://git-scm.com/book/en/v2/Git-Tools-Submodules).
