@@ -24,7 +24,7 @@ var statusCmd = &cobra.Command{
 		if err != nil {
 			log.Panic(err)
 		}
-		fmt.Printf("%#v", plan)
+		fmt.Printf("%#v\n", plan)
 		i, err := ignore.CompileIgnoreFile(filepath.Join(target, ".gitignore"))
 		if err != nil {
 			log.Panic(err)

@@ -6,6 +6,7 @@ import (
 	"log"
 	"path/filepath"
 
+	"github.com/fatih/color"
 	"github.com/google/ent/utils"
 	"github.com/ipfs/go-cid"
 	format "github.com/ipfs/go-ipld-format"
@@ -34,8 +35,10 @@ var pushCmd = &cobra.Command{
 }
 
 func push(filename string, node format.Node) error {
+	marker := color.BlueString("↑")
 	localHash := node.Cid()
 	if !exists(localHash) {
+		fmt.Printf("%s %s %s\n", color.YellowString(localHash.String()), marker, filename)
 		return blobStore.Add(context.Background(), node)
 	}
 	return nil

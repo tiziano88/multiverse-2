@@ -28,41 +28,44 @@ var pullCmd = &cobra.Command{
 			log.Fatalf("could not normalize target directory %q, %v", targetDir, err)
 		}
 
-		files, err := ioutil.ReadDir(targetDir)
-		if os.IsNotExist(err) {
-			// Continue.
-		} else if err != nil {
-			log.Fatalf("could not read target directory %q: %v", targetDir, err)
-		}
-		if len(files) > 0 {
-			log.Fatalf("cannot pull to non-empty directory %q", targetDir)
-		}
-
 		base, err := cid.Decode(hash)
 		if err != nil {
 			log.Fatalf("could not decode cid: %v", err)
 		}
 
-		traverseRemote(base, "", func(p string, node format.Node) error {
-			fullPath := filepath.Join(targetDir, p)
-			log.Printf("%s\n", fullPath)
-			switch node := node.(type) {
-			case *merkledag.ProtoNode:
-				err := os.MkdirAll(fullPath, 0755)
-				if err != nil {
-					log.Fatalf("could not create directory %q: %v", fullPath, err)
-				}
-			case *merkledag.RawNode:
-				err := ioutil.WriteFile(fullPath, node.RawData(), 0644)
-				if err != nil {
-					log.Fatalf("could not create file %q: %v", fullPath, err)
-				}
-			}
-			return nil
-		})
+		pull(base, targetDir)
 
 		log.Printf("pull %s %s", hash, targetDir)
 	},
+}
+
+func pull(base cid.Cid, targetDir string) {
+	files, err := ioutil.ReadDir(targetDir)
+	if os.IsNotExist(err) {
+		// Continue.
+	} else if err != nil {
+		log.Fatalf("could not read target directory %q: %v", targetDir, err)
+	}
+	if len(files) > 0 {
+		log.Fatalf("cannot pull to non-empty directory %q", targetDir)
+	}
+	traverseRemote(base, "", func(p string, node format.Node) error {
+		fullPath := filepath.Join(targetDir, p)
+		log.Printf("%s\n", fullPath)
+		switch node := node.(type) {
+		case *merkledag.ProtoNode:
+			err := os.MkdirAll(fullPath, 0755)
+			if err != nil {
+				log.Fatalf("could not create directory %q: %v", fullPath, err)
+			}
+		case *merkledag.RawNode:
+			err := ioutil.WriteFile(fullPath, node.RawData(), 0644)
+			if err != nil {
+				log.Fatalf("could not create file %q: %v", fullPath, err)
+			}
+		}
+		return nil
+	})
 }
 
 func traverseRemote(base cid.Cid, relativeFilename string, f func(string, format.Node) error) {

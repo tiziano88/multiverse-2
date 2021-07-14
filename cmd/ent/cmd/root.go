@@ -146,6 +146,7 @@ func init() {
 
 	rootCmd.AddCommand(catCmd)
 	rootCmd.AddCommand(diffCmd)
+	rootCmd.AddCommand(makeCmd)
 	rootCmd.AddCommand(pullCmd)
 	rootCmd.AddCommand(pushCmd)
 	rootCmd.AddCommand(statusCmd)
