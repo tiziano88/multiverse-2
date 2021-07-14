@@ -1,5 +1,5 @@
 //
-// Copyright 2021 The Multiverse Authors.
+// Copyright 2021 The Ent Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -31,14 +31,14 @@ import (
 
 	"cloud.google.com/go/storage"
 	"github.com/gin-gonic/gin"
+	"github.com/google/ent/datastore"
+	"github.com/google/ent/nodeservice"
+	"github.com/google/ent/objectstore"
+	"github.com/google/ent/utils"
 	"github.com/ipfs/go-cid"
 	format "github.com/ipfs/go-ipld-format"
 	"github.com/ipfs/go-merkledag"
 	"github.com/multiformats/go-multihash"
-	"github.com/tiziano88/multiverse/datastore"
-	"github.com/tiziano88/multiverse/nodeservice"
-	"github.com/tiziano88/multiverse/objectstore"
-	"github.com/tiziano88/multiverse/utils"
 	"google.golang.org/appengine"
 )
 
@@ -259,7 +259,7 @@ func serveWWW(c *gin.Context, root cid.Cid, segments []string) {
 	}
 	switch node := node.(type) {
 	case *merkledag.RawNode:
-		c.Header("multiverse-hash", target.String())
+		c.Header("ent-hash", target.String())
 		ext := filepath.Ext(segments[len(segments)-1])
 		contentType := mime.TypeByExtension(ext)
 		if contentType == "" {

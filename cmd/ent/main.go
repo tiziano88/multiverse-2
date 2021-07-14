@@ -1,5 +1,5 @@
 //
-// Copyright 2021 The Multiverse Authors.
+// Copyright 2021 The Ent Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 package main
 
 import (
-	"github.com/tiziano88/multiverse/cmd/multi/cmd"
+	"github.com/google/ent/cmd/ent/cmd"
 )
 
 func main() {

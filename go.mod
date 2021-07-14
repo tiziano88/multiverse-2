@@ -1,4 +1,4 @@
-module github.com/tiziano88/multiverse
+module github.com/google/ent
 
 go 1.15
 

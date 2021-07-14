@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/google/ent/utils"
 	"github.com/ipfs/go-cid"
 	format "github.com/ipfs/go-ipld-format"
 	"github.com/spf13/cobra"
-	"github.com/tiziano88/multiverse/utils"
 )
 
 var pushCmd = &cobra.Command{

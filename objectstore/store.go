@@ -5,8 +5,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/ent/datastore"
 	"github.com/multiformats/go-multihash"
-	"github.com/tiziano88/multiverse/datastore"
 )
 
 const hashType = multihash.SHA2_256

@@ -1,5 +1,5 @@
 //
-// Copyright 2021 The Multiverse Authors.
+// Copyright 2021 The Ent Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,10 +23,10 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/google/ent/utils"
 	"github.com/ipfs/go-cid"
 	format "github.com/ipfs/go-ipld-format"
 	"github.com/multiformats/go-multihash"
-	"github.com/tiziano88/multiverse/utils"
 )
 
 type Remote struct {

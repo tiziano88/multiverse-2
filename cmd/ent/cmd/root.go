@@ -8,14 +8,14 @@ import (
 	"path/filepath"
 
 	"github.com/BurntSushi/toml"
+	"github.com/google/ent/datastore"
+	"github.com/google/ent/nodeservice"
+	"github.com/google/ent/objectstore"
+	"github.com/google/ent/tagstore"
+	"github.com/google/ent/utils"
 	"github.com/ipfs/go-cid"
 	format "github.com/ipfs/go-ipld-format"
 	"github.com/spf13/cobra"
-	"github.com/tiziano88/multiverse/datastore"
-	"github.com/tiziano88/multiverse/nodeservice"
-	"github.com/tiziano88/multiverse/objectstore"
-	"github.com/tiziano88/multiverse/tagstore"
-	"github.com/tiziano88/multiverse/utils"
 )
 
 var (
@@ -42,41 +42,41 @@ func InitRemote(remote Remote) {
 		baseDir := remote.Path
 
 		{
-			multiverseBlobCacheDir := filepath.Join(baseDir, "blobs")
-			err := os.MkdirAll(multiverseBlobCacheDir, 0755)
+			blobsDir := filepath.Join(baseDir, "blobs")
+			err := os.MkdirAll(blobsDir, 0755)
 			if err != nil {
-				log.Fatalf("could not create blob cache dir: %v", err)
+				log.Fatalf("could not create blobs dir: %v", err)
 			}
 			blobStore = nodeservice.DataStore{
 				Inner: objectstore.Store{
 					Inner: datastore.File{
-						DirName: multiverseBlobCacheDir,
+						DirName: blobsDir,
 					},
 				},
 			}
 		}
 
 		{
-			multiverseTagsCacheDir := filepath.Join(baseDir, "tags")
-			err := os.MkdirAll(multiverseTagsCacheDir, 0755)
+			tagsDir := filepath.Join(baseDir, "tags")
+			err := os.MkdirAll(tagsDir, 0755)
 			if err != nil {
-				log.Fatalf("could not create tag cache dir: %v", err)
+				log.Fatalf("could not create tags dir: %v", err)
 			}
 			tagStore = tagstore.File{
-				DirName: multiverseTagsCacheDir,
+				DirName: tagsDir,
 			}
 		}
 	}
 }
 
 var rootCmd = &cobra.Command{
-	Use: "multi",
+	Use: "ent",
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		s, err := os.UserConfigDir()
 		if err != nil {
 			log.Fatalf("could not load config dir: %v", err)
 		}
-		s = filepath.Join(s, "multiverse.toml")
+		s = filepath.Join(s, "ent.toml")
 		f, err := ioutil.ReadFile(s)
 		if err != nil {
 			log.Printf("could not read config: %v", err)

@@ -6,13 +6,13 @@ import (
 	"os"
 	"strings"
 
+	"github.com/google/ent/datastore"
+	"github.com/google/ent/nodeservice"
+	"github.com/google/ent/objectstore"
 	"github.com/ipfs/go-cid"
 	format "github.com/ipfs/go-ipld-format"
 	"github.com/ipfs/go-merkledag/dagutils"
 	"github.com/spf13/cobra"
-	"github.com/tiziano88/multiverse/datastore"
-	"github.com/tiziano88/multiverse/nodeservice"
-	"github.com/tiziano88/multiverse/objectstore"
 )
 
 var diffCmd = &cobra.Command{
@@ -21,8 +21,8 @@ var diffCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) != 2 {
 			fmt.Println("usage")
-			fmt.Println("multi diff <from> <to>")
-			fmt.Println("<from> and <to> are either local file paths, or multiverse hashes")
+			fmt.Println("ent diff <from> <to>")
+			fmt.Println("<from> and <to> are either local file paths, or ent hashes")
 			os.Exit(1)
 		}
 
