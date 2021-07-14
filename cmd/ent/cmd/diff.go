@@ -3,7 +3,9 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/google/ent/datastore"
@@ -12,6 +14,7 @@ import (
 	"github.com/ipfs/go-cid"
 	format "github.com/ipfs/go-ipld-format"
 	"github.com/ipfs/go-merkledag/dagutils"
+	ignore "github.com/sabhiram/go-gitignore"
 	"github.com/spf13/cobra"
 )
 
@@ -66,7 +69,11 @@ func buildInMemory(path string) (cid.Cid, nodeservice.DataStore) {
 		// TODO
 		return nil
 	}
-	hash := traverse(path, "", f)
+	i, err := ignore.CompileIgnoreFile(filepath.Join(path, ".gitignore"))
+	if err != nil {
+		log.Panic(err)
+	}
+	hash := traverse(path, "", i, f)
 	return hash, s
 }
 

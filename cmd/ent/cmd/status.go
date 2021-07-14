@@ -3,9 +3,12 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"log"
+	"path/filepath"
 
 	"github.com/fatih/color"
 	format "github.com/ipfs/go-ipld-format"
+	ignore "github.com/sabhiram/go-gitignore"
 	"github.com/spf13/cobra"
 )
 
@@ -17,7 +20,16 @@ var statusCmd = &cobra.Command{
 		if len(args) > 0 {
 			target = args[0]
 		}
-		hash := traverse(target, "", status)
+		plan, err := parsePlan(filepath.Join(target, planFilename))
+		if err != nil {
+			log.Panic(err)
+		}
+		fmt.Printf("%#v", plan)
+		i, err := ignore.CompileIgnoreFile(filepath.Join(target, ".gitignore"))
+		if err != nil {
+			log.Panic(err)
+		}
+		hash := traverse(target, "", i, status)
 		fmt.Printf("%s %s\n", hash, target)
 	},
 }

@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"path/filepath"
 
 	"github.com/google/ent/utils"
 	"github.com/ipfs/go-cid"
 	format "github.com/ipfs/go-ipld-format"
+	ignore "github.com/sabhiram/go-gitignore"
 	"github.com/spf13/cobra"
 )
 
@@ -19,7 +21,11 @@ var pushCmd = &cobra.Command{
 		if len(args) > 0 {
 			target = args[0]
 		}
-		hash := traverse(target, "", push)
+		i, err := ignore.CompileIgnoreFile(filepath.Join(target, ".gitignore"))
+		if err != nil {
+			log.Panic(err)
+		}
+		hash := traverse(target, "", i, push)
 		fmt.Printf("%s %s\n", hash, target)
 		if tagName != "" {
 			tagStore.Set(context.Background(), tagName, []byte(utils.Hash(hash)))

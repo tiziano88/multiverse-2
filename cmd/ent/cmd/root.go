@@ -15,6 +15,7 @@ import (
 	"github.com/google/ent/utils"
 	"github.com/ipfs/go-cid"
 	format "github.com/ipfs/go-ipld-format"
+	ignore "github.com/sabhiram/go-gitignore"
 	"github.com/spf13/cobra"
 )
 
@@ -31,6 +32,32 @@ type Config struct {
 type Remote struct {
 	Path string
 	URL  string
+}
+
+type Plan struct {
+	Overrides []Override
+}
+
+type Override struct {
+	Path string
+	From string
+}
+
+const planFilename = "entplan.toml"
+
+func parsePlan(filename string) (Plan, error) {
+	var plan Plan
+
+	f, err := ioutil.ReadFile(filename)
+	if err != nil {
+		return plan, err
+	}
+	err = toml.Unmarshal(f, &plan)
+	if err != nil {
+		return plan, err
+	}
+
+	return plan, nil
 }
 
 func InitRemote(remote Remote) {
@@ -125,7 +152,7 @@ func init() {
 	rootCmd.AddCommand(tagsCmd)
 }
 
-func traverse(base string, relativeFilename string, f func(string, format.Node) error) cid.Cid {
+func traverse(base string, relativeFilename string, i *ignore.GitIgnore, f func(string, format.Node) error) cid.Cid {
 	file, err := os.Open(path.Join(base, relativeFilename))
 	if err != nil {
 		log.Fatal(err)
@@ -145,10 +172,10 @@ func traverse(base string, relativeFilename string, f func(string, format.Node) 
 		node := utils.NewProtoNode()
 		for _, ff := range files {
 			newRelativeFilename := path.Join(relativeFilename, ff.Name())
-			if ignore(newRelativeFilename) {
+			if i.MatchesPath(newRelativeFilename) {
 				// Nothing
 			} else {
-				hash := traverse(base, newRelativeFilename, f)
+				hash := traverse(base, newRelativeFilename, i, f)
 				utils.SetLink(node, ff.Name(), hash)
 			}
 		}
@@ -178,8 +205,4 @@ func traverse(base string, relativeFilename string, f func(string, format.Node) 
 
 		return node.Cid()
 	}
-}
-
-func ignore(p string) bool {
-	return filepath.Base(p) == ".git"
 }
