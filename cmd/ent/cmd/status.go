@@ -29,12 +29,14 @@ var statusCmd = &cobra.Command{
 		if err != nil {
 			log.Panic(err)
 		}
-		hash := traverse(target, "", i, status)
-		fmt.Printf("%s %s\n", hash, target)
+		traverse(target, "", i, status)
 	},
 }
 
 func status(filename string, node format.Node) error {
+	if filename == "" {
+		filename = "."
+	}
 	marker := color.RedString("*")
 	ok, _ := blobStore.Has(context.Background(), node.Cid())
 	if ok {

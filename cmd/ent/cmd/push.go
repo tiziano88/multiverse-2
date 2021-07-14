@@ -27,7 +27,6 @@ var pushCmd = &cobra.Command{
 			log.Panic(err)
 		}
 		hash := traverse(target, "", i, push)
-		fmt.Printf("%s %s\n", hash, target)
 		if tagName != "" {
 			tagStore.Set(context.Background(), tagName, []byte(utils.Hash(hash)))
 		}
@@ -35,6 +34,9 @@ var pushCmd = &cobra.Command{
 }
 
 func push(filename string, node format.Node) error {
+	if filename == "" {
+		filename = "."
+	}
 	marker := color.BlueString("↑")
 	localHash := node.Cid()
 	if !exists(localHash) {
