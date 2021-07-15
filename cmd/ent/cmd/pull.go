@@ -39,18 +39,27 @@ var pullCmd = &cobra.Command{
 	},
 }
 
-func pull(base cid.Cid, targetDir string) {
-	files, err := ioutil.ReadDir(targetDir)
+func pull(base cid.Cid, targetPath string) {
+	_, err := os.Stat(targetPath)
+	if err != nil {
+		log.Fatalf("could not stat target path: %v", err)
+	}
+	if !os.IsNotExist(err) {
+		log.Printf("target path %s already exists; skipping", targetPath)
+		// Skip?
+		return
+	}
+	files, err := ioutil.ReadDir(targetPath)
 	if os.IsNotExist(err) {
 		// Continue.
 	} else if err != nil {
-		log.Fatalf("could not read target directory %q: %v", targetDir, err)
+		log.Fatalf("could not read target directory %q: %v", targetPath, err)
 	}
 	if len(files) > 0 {
-		log.Fatalf("cannot pull to non-empty directory %q", targetDir)
+		log.Fatalf("cannot pull to non-empty directory %q", targetPath)
 	}
 	traverseRemote(base, "", func(p string, node format.Node) error {
-		fullPath := filepath.Join(targetDir, p)
+		fullPath := filepath.Join(targetPath, p)
 		log.Printf("%s\n", fullPath)
 		switch node := node.(type) {
 		case *merkledag.ProtoNode:
