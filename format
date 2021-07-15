@@ -5,4 +5,4 @@ set -o nounset
 set -o xtrace
 set -o pipefail
 
-./data/node ./data/prettier
+./tools/node ./tools/prettier/bin-prettier.js --write README.md
