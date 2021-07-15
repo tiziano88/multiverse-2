@@ -1,4 +1,7 @@
 [[overrides]]
-path = "example_2"
-from = "bafybeie46l4ev3o5jvzsuuwdnrp3z45522crey6oaauilgimvlyngokoxm"
-# from = "bafybeig3diia4dx7e64jhgqfp7m7xmaguuexfguyi4as4e7xc52dfjil4e/example"
+path = "tools/node"
+from = "bafkreidhwdqb3p6lqzxe55na5hrdrw7d5meput4mpfcixcspo2nevbbafi"
+
+[[overrides]]
+path = "tools/prettier"
+from = "bafkreiehxpsmilwpzvvv7sa6noo3wnr3tz3jckg4ggv2krtz3eywosr5ni"

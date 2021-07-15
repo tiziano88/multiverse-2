@@ -59,7 +59,11 @@ func pull(base cid.Cid, targetDir string) {
 				log.Fatalf("could not create directory %q: %v", fullPath, err)
 			}
 		case *merkledag.RawNode:
-			err := ioutil.WriteFile(fullPath, node.RawData(), 0644)
+			err := os.MkdirAll(path.Dir(fullPath), 0755)
+			if err != nil {
+				log.Fatalf("could not create directory %q: %v", fullPath, err)
+			}
+			err = ioutil.WriteFile(fullPath, node.RawData(), 0644)
 			if err != nil {
 				log.Fatalf("could not create file %q: %v", fullPath, err)
 			}

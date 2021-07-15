@@ -87,12 +87,12 @@ func main() {
 		blobStore = nodeservice.DataStore{
 			Inner: objectstore.Store{
 				Inner: datastore.File{
-					DirName: "data",
+					DirName: "data/objects",
 				},
 			},
 		}
 		tagStore = datastore.File{
-			DirName: "tags",
+			DirName: "data/tags",
 		}
 	} else {
 		blobStore = nodeservice.DataStore{

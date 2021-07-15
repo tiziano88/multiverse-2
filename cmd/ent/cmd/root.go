@@ -61,8 +61,15 @@ func parsePlan(filename string) (Plan, error) {
 }
 
 func parseIgnore(targetDir string) *ignore.GitIgnore {
+	s, err := os.Stat(targetDir)
+	if err != nil {
+		log.Panic(err)
+	}
+	if !s.IsDir() {
+		return &ignore.GitIgnore{}
+	}
 	filename := filepath.Join(targetDir, ".gitignore")
-	_, err := os.Stat(filename)
+	_, err = os.Stat(filename)
 	if os.IsNotExist(err) {
 		return &ignore.GitIgnore{}
 	} else if err != nil {

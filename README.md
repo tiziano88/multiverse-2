@@ -1,20 +1,59 @@
 # Ent
 
-Ent is an experimental universal, general purpose, Content-Addressable Store (CAS) to explore transparency logs, policies and graph structures.
+Ent is an experimental universal, scalable, general purpose, Content-Addressable
+Store (CAS) to explore verifiable data structures, policies and graphs.
+
+The end goal of Ent is for there to exist a few large Ent servers around the
+world that store arbitrary content, and are connected with each other in a
+federated way. Similarly to how git repositories are normally hosted on one of a
+few large websites, arbitrary content would be stored on one or more Ent
+servers, and users would interact with them via command line clients, web UI, or
+libraries integrated in other applications.
+
+Ent servers may store arbitrary static content, from source code, to binary
+artifacts, to entire websites.
+
+Since everything in Ent is content-addressed, it is not necessary to blindly
+trust any Ent server about the integrity of the data it provides; assuming the
+hash of an object is obtained from a trustworthy source, the corresponding data
+returned by an Ent server is checked by the client to match that particular
+hash, effectively making the content self-verifying.
 
 This is not an officially supported Google product.
 
 ## Object Store
 
-At its core, Ent can store and retrieve uninterpreted bytes (called objects) by their hash.
+At its core, Ent exposes a low-level object store API, which allows clients to
+store and retrieve raw (uninterpreted) bytes (called objects) by their hash.
 
-## DAG Service
+For instance, an object containing the string `ent` (in ASCII / UTF-8) is
+identified by the following object hash (sha256):
 
-TODO
+`b86a048d168012ef5c3f960bd96646826915d5bce747bc239489e1832cb15c78`
+
+## Node Service
+
+On top of the object store API, an Ent server may also expose a higher-level
+node service API.
+
+Each node is represented by an underlying object by its hash, but it is
+interpreted differently according to its kind.
+
+A node id has the following
+[multicodec](https://github.com/multiformats/multicodec) form:
+
+`bafkreifynici2fuaclxvyp4wbpmwmrucnek5lphhi66chfej4gbszmk4pa`
+
+Each node may be of one of the following kinds:
+
+- raw node (0x55): an uninterpreted byte sequence.
+- DAG node (0x70): a node in
+  [DAG-protobuf](https://ipld.io/docs/codecs/known/dag-pb/) format with links to
+  zero or more other nodes, referencing them by their node id.
 
 ## Server
 
-The Ent server exposes an HTTP API to allow clients to push and pull individual nodes, identified by their hash.
+The Ent server exposes an object store API and a node service API.
 
 In order to run the server locally, use the following command:
 
@@ -24,7 +63,8 @@ In order to run the server locally, use the following command:
 
 ## Command-Line Interface
 
-The Ent CLI offers a way to operate on files on the local file system and sync them to one or more Ent servers or local directories.
+The Ent CLI offers a way to operate on files on the local file system and sync
+them to one or more Ent remotes via their node service API.
 
 ### Installation
 
@@ -42,16 +82,20 @@ ent help
 
 ### Configuration
 
-The CLI relies on a local configuration file at `~/.config/ent.toml`, which should contain a list of remotes, e.g.:
+The CLI relies on a local configuration file at `~/.config/ent.toml`, which
+should contain a list of remotes, e.g.:
 
 ```toml
-default_remote = "01"
+default_remote = "fs"
 
-[remotes.01]
-url = "https://01.plus"
+[remotes.fs]
+path = "/tmp/ent"
 
-[remotes.local]
-path = "/home/tzn/.cache/ent"
+[remotes.localhost]
+url = "http://localhost:8080"
+
+[remotes.foo]
+url = "https://foo.bar"
 ```
 
 Note that `~` and env variables are **not** expanded.
