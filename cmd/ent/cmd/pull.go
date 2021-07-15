@@ -33,15 +33,17 @@ var pullCmd = &cobra.Command{
 			log.Fatalf("could not decode cid: %v", err)
 		}
 
-		pull(base, targetDir)
+		pull(base, targetDir, false)
 
 		log.Printf("pull %s %s", hash, targetDir)
 	},
 }
 
-func pull(base cid.Cid, targetPath string) {
+func pull(base cid.Cid, targetPath string, executable bool) {
 	_, err := os.Stat(targetPath)
-	if err != nil {
+	if os.IsNotExist(err) {
+		// Continue.
+	} else if err != nil {
 		log.Fatalf("could not stat target path: %v", err)
 	}
 	if !os.IsNotExist(err) {
@@ -72,7 +74,11 @@ func pull(base cid.Cid, targetPath string) {
 			if err != nil {
 				log.Fatalf("could not create directory %q: %v", fullPath, err)
 			}
-			err = ioutil.WriteFile(fullPath, node.RawData(), 0644)
+			mode := 0644
+			if executable {
+				mode = 0755
+			}
+			err = ioutil.WriteFile(fullPath, node.RawData(), os.FileMode(mode))
 			if err != nil {
 				log.Fatalf("could not create file %q: %v", fullPath, err)
 			}

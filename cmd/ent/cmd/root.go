@@ -39,8 +39,9 @@ type Plan struct {
 }
 
 type Override struct {
-	Path string
-	From string
+	Path       string
+	From       string
+	Executable bool
 }
 
 const planFilename = "entplan.toml"

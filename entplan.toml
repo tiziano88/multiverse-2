@@ -1,6 +1,7 @@
 [[overrides]]
 path = "tools/node"
 from = "bafkreidhwdqb3p6lqzxe55na5hrdrw7d5meput4mpfcixcspo2nevbbafi"
+executable = true
 
 [[overrides]]
 path = "tools/prettier"

@@ -32,7 +32,7 @@ var makeCmd = &cobra.Command{
 			if err != nil {
 				log.Fatalf("could not decode cid: %v", err)
 			}
-			pull(base, o.Path)
+			pull(base, o.Path, o.Executable)
 		}
 	},
 }
