@@ -88,7 +88,7 @@ func pull(base cid.Cid, targetPath string, executable bool) {
 }
 
 func traverseRemote(base cid.Cid, relativeFilename string, f func(string, format.Node) error) {
-	node, err := blobStore.Get(context.Background(), base)
+	node, err := nodeService.Get(context.Background(), base)
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -20,8 +20,8 @@ import (
 )
 
 var (
-	blobStore nodeservice.NodeService
-	tagStore  tagstore.TagStore
+	nodeService nodeservice.NodeService
+	tagStore    tagstore.TagStore
 )
 
 type Config struct {
@@ -86,7 +86,7 @@ func parseIgnore(targetDir string) *ignore.GitIgnore {
 
 func InitRemote(remote Remote) {
 	if remote.URL != "" {
-		blobStore = nodeservice.Remote{
+		nodeService = nodeservice.Remote{
 			APIURL: remote.URL,
 		}
 	} else if remote.Path != "" {
@@ -98,7 +98,7 @@ func InitRemote(remote Remote) {
 			if err != nil {
 				log.Fatalf("could not create blobs dir: %v", err)
 			}
-			blobStore = nodeservice.DataStore{
+			nodeService = nodeservice.DataStore{
 				Inner: objectstore.Store{
 					Inner: datastore.File{
 						DirName: blobsDir,

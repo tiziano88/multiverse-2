@@ -116,8 +116,11 @@ func main() {
 		router.LoadHTMLGlob("templates/*")
 
 		// Uninterpreted bytes by hash, no DAG traversal.
-		router.POST("/api/objects/get", apiObjectsGetHandler)
-		router.POST("/api/objects/update", apiObjectsUpdateHandler)
+		router.GET("/api/objects/:objecthash", apiObjectsGetHandler)
+		router.POST("/api/objects", apiObjectsUpdateHandler)
+
+		// router.POST("/api/objects/get", apiObjectsGetHandler)
+		// router.POST("/api/objects/update", apiObjectsUpdateHandler)
 
 		router.POST("/api/get", apiGetHandler)
 		router.POST("/api/update", apiUpdateHandler)
@@ -440,11 +443,7 @@ func apiRemoveHandler(c *gin.Context) {
 }
 
 func apiObjectsGetHandler(c *gin.Context) {
-	var req utils.ObjectsGetRequest
-	json.NewDecoder(c.Request.Body).Decode(&req)
-	log.Printf("req: %#v", req)
-
-	hash, err := utils.ParseHash(req.Hash)
+	hash, err := utils.ParseHash(c.Param("objecthash"))
 	if err != nil {
 		log.Print(err)
 		c.AbortWithStatus(http.StatusBadRequest)
@@ -461,36 +460,31 @@ func apiObjectsGetHandler(c *gin.Context) {
 		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
-	node, err := blobStore.GetObject(c, hash)
+	object, err := blobStore.GetObject(c, hash)
 	if err != nil {
 		log.Print(err)
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
-	res := utils.ObjectsGetResponse{
-		Content: node,
-	}
-	log.Printf("res: %#v", res)
-	c.JSON(http.StatusOK, res)
+	c.Data(http.StatusOK, "application/octet-stream", object)
 }
 
 func apiObjectsUpdateHandler(c *gin.Context) {
-	var req utils.ObjectsUpdateRequest
-	json.NewDecoder(c.Request.Body).Decode(&req)
-	log.Printf("req: %#v", req)
+	object, err := ioutil.ReadAll(c.Request.Body)
+	if err != nil {
+		log.Print(err)
+		c.AbortWithStatus(http.StatusBadRequest)
+		return
+	}
 
-	h, err := blobStore.AddObject(c, req.Content)
+	hash, err := blobStore.AddObject(c, object)
 	if err != nil {
 		log.Print(err)
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
 
-	res := utils.ObjectsUpdateResponse{
-		Hash: h.HexString(),
-	}
-	log.Printf("res: %#v", res)
-	c.JSON(http.StatusOK, res)
+	c.String(http.StatusOK, hash.HexString())
 }
 
 func apiGetHandler(c *gin.Context) {

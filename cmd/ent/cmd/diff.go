@@ -29,10 +29,10 @@ var diffCmd = &cobra.Command{
 		from := args[0]
 		if !strings.HasPrefix(from, "baf") {
 			hash, inMemory := buildInMemory(from)
-			blobStore = nodeservice.Multiplex{
+			nodeService = nodeservice.Multiplex{
 				Inner: []nodeservice.NodeService{
 					inMemory,
-					blobStore,
+					nodeService,
 				},
 			}
 			from = hash.String()
@@ -41,10 +41,10 @@ var diffCmd = &cobra.Command{
 		to := args[1]
 		if !strings.HasPrefix(to, "baf") {
 			hash, inMemory := buildInMemory(to)
-			blobStore = nodeservice.Multiplex{
+			nodeService = nodeservice.Multiplex{
 				Inner: []nodeservice.NodeService{
 					inMemory,
-					blobStore,
+					nodeService,
 				},
 			}
 			to = hash.String()
@@ -98,13 +98,13 @@ func diff(from string, to string) error {
 }
 
 func diffCid(from cid.Cid, to cid.Cid) ([]*dagutils.Change, error) {
-	fromNode, err := blobStore.Get(context.Background(), from)
+	fromNode, err := nodeService.Get(context.Background(), from)
 	if err != nil {
 		return nil, fmt.Errorf("could not get from: %v", err)
 	}
-	toNode, err := blobStore.Get(context.Background(), to)
+	toNode, err := nodeService.Get(context.Background(), to)
 	if err != nil {
 		return nil, fmt.Errorf("could not get to: %v", err)
 	}
-	return dagutils.Diff(context.TODO(), blobStore, fromNode, toNode)
+	return dagutils.Diff(context.TODO(), nodeService, fromNode, toNode)
 }

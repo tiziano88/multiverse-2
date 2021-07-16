@@ -24,22 +24,6 @@ import (
 	"github.com/multiformats/go-multihash"
 )
 
-type ObjectsGetRequest struct {
-	Hash string
-}
-
-type ObjectsGetResponse struct {
-	Content []byte
-}
-
-type ObjectsUpdateRequest struct {
-	Content []byte
-}
-
-type ObjectsUpdateResponse struct {
-	Hash string
-}
-
 func NewProtoNode() *merkledag.ProtoNode {
 	node := merkledag.ProtoNode{}
 	node.SetCidBuilder(merkledag.V1CidPrefix())

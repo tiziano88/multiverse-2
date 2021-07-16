@@ -36,13 +36,14 @@ func push(filename string, node format.Node) error {
 	localHash := node.Cid()
 	if !exists(localHash) {
 		fmt.Printf("%s %s %s\n", color.YellowString(localHash.String()), marker, filename)
-		return blobStore.Add(context.Background(), node)
+		_, err := nodeService.AddObject(context.Background(), node.RawData())
+		return err
 	}
 	return nil
 }
 
 func exists(hash cid.Cid) bool {
-	ok, err := blobStore.Has(context.Background(), hash)
+	ok, err := nodeService.Has(context.Background(), hash)
 	if err != nil {
 		log.Fatal(err)
 	}

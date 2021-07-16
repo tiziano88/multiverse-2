@@ -3,8 +3,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"log"
-	"path/filepath"
 
 	"github.com/fatih/color"
 	format "github.com/ipfs/go-ipld-format"
@@ -19,11 +17,6 @@ var statusCmd = &cobra.Command{
 		if len(args) > 0 {
 			target = args[0]
 		}
-		plan, err := parsePlan(filepath.Join(target, planFilename))
-		if err != nil {
-			log.Panic(err)
-		}
-		fmt.Printf("%#v\n", plan)
 		i := parseIgnore(target)
 		traverse(target, "", i, status)
 	},
@@ -34,7 +27,7 @@ func status(filename string, node format.Node) error {
 		filename = "."
 	}
 	marker := color.RedString("*")
-	ok, _ := blobStore.Has(context.Background(), node.Cid())
+	ok, _ := nodeService.Has(context.Background(), node.Cid())
 	if ok {
 		marker = color.GreenString("✓")
 	}

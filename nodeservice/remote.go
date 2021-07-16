@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 
@@ -58,12 +59,7 @@ type GetResponse struct {
 }
 
 func (s Remote) GetObject(ctx context.Context, h multihash.Multihash) ([]byte, error) {
-	r := utils.ObjectsGetRequest{
-		Hash: h.HexString(),
-	}
-	buf := bytes.Buffer{}
-	json.NewEncoder(&buf).Encode(r)
-	res, err := http.Post(s.APIURL+"/api/objects/get", "", &buf)
+	res, err := http.Get(s.APIURL + "/api/objects/" + h.HexString())
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -74,21 +70,15 @@ func (s Remote) GetObject(ctx context.Context, h multihash.Multihash) ([]byte, e
 		return nil, fmt.Errorf("error: %v", res.Status)
 	}
 
-	response := utils.ObjectsGetResponse{}
-	err = json.NewDecoder(res.Body).Decode(&response)
+	bytes, err := ioutil.ReadAll(res.Body)
 	if err != nil {
 		return nil, err
 	}
-	return response.Content, nil
+	return bytes, nil
 }
 
 func (s Remote) AddObject(ctx context.Context, b []byte) (multihash.Multihash, error) {
-	r := utils.ObjectsUpdateRequest{
-		Content: b,
-	}
-	buf := bytes.Buffer{}
-	json.NewEncoder(&buf).Encode(r)
-	res, err := http.Post(s.APIURL+"/api/objects/update", "", &buf)
+	res, err := http.Post(s.APIURL+"/api/objects", "", bytes.NewReader(b))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -99,12 +89,11 @@ func (s Remote) AddObject(ctx context.Context, b []byte) (multihash.Multihash, e
 		return nil, fmt.Errorf("error: %v", res.Status)
 	}
 
-	response := utils.ObjectsUpdateResponse{}
-	err = json.NewDecoder(res.Body).Decode(&response)
+	body, err := ioutil.ReadAll(res.Body)
 	if err != nil {
 		return nil, err
 	}
-	h, err := multihash.FromHexString(response.Hash)
+	h, err := multihash.FromHexString(string(body))
 	if err != nil {
 		return nil, err
 	}

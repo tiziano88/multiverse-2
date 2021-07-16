@@ -33,7 +33,7 @@ var catCmd = &cobra.Command{
 		var node format.Node
 
 		for {
-			node, err = blobStore.Get(context.Background(), base)
+			node, err = nodeService.Get(context.Background(), base)
 			if err != nil {
 				log.Fatalf("could not fetch node: %v", err)
 			}
