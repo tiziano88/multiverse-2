@@ -3,8 +3,10 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"log"
 
 	"github.com/fatih/color"
+	"github.com/google/ent/nodeservice"
 	format "github.com/ipfs/go-ipld-format"
 	"github.com/spf13/cobra"
 )
@@ -27,8 +29,12 @@ func status(filename string, node format.Node) error {
 		filename = "."
 	}
 	marker := color.RedString("*")
-	ok, _ := nodeService.Has(context.Background(), node.Cid())
-	if ok {
+	_, err := nodeService.GetObject(context.Background(), node.Cid().Hash())
+	if err == nodeservice.ErrNotFound {
+		marker = color.RedString("*")
+	} else if err != nil {
+		log.Fatalf("could not fetch object: %v", err)
+	} else {
 		marker = color.GreenString("✓")
 	}
 	// hash = hash[len(hash)-16:]

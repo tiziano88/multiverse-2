@@ -117,6 +117,8 @@ func InitRemote(remote Remote) {
 				DirName: tagsDir,
 			}
 		}
+	} else {
+		log.Fatal("no remote specified")
 	}
 }
 

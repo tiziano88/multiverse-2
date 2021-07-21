@@ -23,6 +23,8 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"net/url"
+	"path"
 
 	"github.com/google/ent/utils"
 	"github.com/ipfs/go-cid"
@@ -58,13 +60,20 @@ type GetResponse struct {
 	Content []byte
 }
 
+var (
+	ErrNotFound = fmt.Errorf("not found")
+)
+
 func (s Remote) GetObject(ctx context.Context, h multihash.Multihash) ([]byte, error) {
-	res, err := http.Get(s.APIURL + "/api/objects/" + h.HexString())
+	// res, err := http.Get(s.APIURL + "/api/objects/" + h.HexString())
+	u, _ := url.Parse(s.APIURL)
+	u.Path = path.Join(u.Path, h.HexString())
+	res, err := http.Get(u.String())
 	if err != nil {
 		log.Fatal(err)
 	}
 	if res.StatusCode == http.StatusNotFound {
-		return nil, fmt.Errorf("not found")
+		return nil, ErrNotFound
 	}
 	if res.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("error: %v", res.Status)
@@ -78,7 +87,8 @@ func (s Remote) GetObject(ctx context.Context, h multihash.Multihash) ([]byte, e
 }
 
 func (s Remote) AddObject(ctx context.Context, b []byte) (multihash.Multihash, error) {
-	res, err := http.Post(s.APIURL+"/api/objects", "", bytes.NewReader(b))
+	// res, err := http.Post(s.APIURL+"/api/objects", "", bytes.NewReader(b))
+	res, err := http.Post(s.APIURL, "", bytes.NewReader(b))
 	if err != nil {
 		log.Fatal(err)
 	}

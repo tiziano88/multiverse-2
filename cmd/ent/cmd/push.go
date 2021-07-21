@@ -6,6 +6,7 @@ import (
 	"log"
 
 	"github.com/fatih/color"
+	"github.com/google/ent/nodeservice"
 	"github.com/google/ent/utils"
 	"github.com/ipfs/go-cid"
 	format "github.com/ipfs/go-ipld-format"
@@ -32,9 +33,12 @@ func push(filename string, node format.Node) error {
 	if filename == "" {
 		filename = "."
 	}
-	marker := color.BlueString("↑")
 	localHash := node.Cid()
-	if !exists(localHash) {
+	if exists(localHash) {
+		marker := color.GreenString("✓")
+		fmt.Printf("%s %s %s\n", color.YellowString(localHash.String()), marker, filename)
+	} else {
+		marker := color.BlueString("↑")
 		fmt.Printf("%s %s %s\n", color.YellowString(localHash.String()), marker, filename)
 		_, err := nodeService.AddObject(context.Background(), node.RawData())
 		return err
@@ -43,9 +47,11 @@ func push(filename string, node format.Node) error {
 }
 
 func exists(hash cid.Cid) bool {
-	ok, err := nodeService.Has(context.Background(), hash)
-	if err != nil {
+	_, err := nodeService.GetObject(context.Background(), hash.Hash())
+	if err == nodeservice.ErrNotFound {
+		return false
+	} else if err != nil {
 		log.Fatal(err)
 	}
-	return ok
+	return true
 }

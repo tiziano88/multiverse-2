@@ -50,8 +50,8 @@ var (
 	handlerWWW    http.Handler
 )
 
-const blobBucketName = "multiverse-312721.appspot.com"
-const tagBucketName = "multiverse-312721-key"
+const objectsBucketName = "ent-objects"
+const tagsBucketName = "multiverse-312721-key"
 
 const wwwSegment = "www"
 const tagsSegment = "tags"
@@ -99,13 +99,13 @@ func main() {
 			Inner: objectstore.Store{
 				Inner: datastore.Cloud{
 					Client:     storageClient,
-					BucketName: blobBucketName,
+					BucketName: objectsBucketName,
 				},
 			},
 		}
 		tagStore = datastore.Cloud{
 			Client:     storageClient,
-			BucketName: tagBucketName,
+			BucketName: tagsBucketName,
 		}
 	}
 

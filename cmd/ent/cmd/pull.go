@@ -8,6 +8,7 @@ import (
 	"path"
 	"path/filepath"
 
+	"github.com/google/ent/utils"
 	"github.com/ipfs/go-cid"
 	format "github.com/ipfs/go-ipld-format"
 	"github.com/ipfs/go-merkledag"
@@ -88,13 +89,17 @@ func pull(base cid.Cid, targetPath string, executable bool) {
 }
 
 func traverseRemote(base cid.Cid, relativeFilename string, f func(string, format.Node) error) {
-	node, err := nodeService.Get(context.Background(), base)
+	obj, err := nodeService.GetObject(context.Background(), base.Hash())
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	switch node := node.(type) {
-	case *merkledag.ProtoNode:
+	switch base.Prefix().Codec {
+	case cid.DagProtobuf:
+		node, err := utils.ParseProtoNode(obj)
+		if err != nil {
+			log.Fatal(err)
+		}
 		err = f(relativeFilename, node)
 		if err != nil {
 			log.Fatal(err)
@@ -107,10 +112,16 @@ func traverseRemote(base cid.Cid, relativeFilename string, f func(string, format
 			newRelativeFilename := path.Join(relativeFilename, l.Name)
 			traverseRemote(l.Cid, newRelativeFilename, f)
 		}
-	case *merkledag.RawNode:
+	case cid.Raw:
+		node, err := utils.ParseRawNode(obj)
+		if err != nil {
+			log.Fatal(err)
+		}
 		err = f(relativeFilename, node)
 		if err != nil {
 			log.Fatal(err)
 		}
+	default:
+		log.Fatalf("invalid codec: %v", base.Prefix().Codec)
 	}
 }

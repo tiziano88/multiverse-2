@@ -94,8 +94,8 @@ path = "/tmp/ent"
 [remotes.localhost]
 url = "http://localhost:8080"
 
-[remotes.foo]
-url = "https://foo.bar"
+[remotes.obj]
+url = "https://storage.googleapis.com/ent-objects"
 ```
 
 Note that `~` and env variables are **not** expanded.
