@@ -23,6 +23,11 @@ import (
 	"github.com/multiformats/go-multihash"
 )
 
+type ObjectStore interface {
+	GetObject(ctx context.Context, h multihash.Multihash) ([]byte, error)
+	AddObject(ctx context.Context, b []byte) (multihash.Multihash, error)
+}
+
 // https://github.com/ipfs/go-ipld-format/blob/579737706ba5da3e550111621e2ab1bf122ed53f/merkledag.go
 type NodeService interface {
 	Has(context.Context, cid.Cid) (bool, error)
@@ -30,6 +35,5 @@ type NodeService interface {
 	// Add(context.Context, format.Node) error
 	format.DAGService
 
-	GetObject(ctx context.Context, h multihash.Multihash) ([]byte, error)
-	AddObject(ctx context.Context, b []byte) (multihash.Multihash, error)
+	ObjectStore
 }

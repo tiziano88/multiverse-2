@@ -17,6 +17,7 @@ package utils
 
 import (
 	"encoding/hex"
+	"fmt"
 
 	"github.com/ipfs/go-cid"
 	format "github.com/ipfs/go-ipld-format"
@@ -45,6 +46,18 @@ func ParseRawNode(b []byte) (*merkledag.RawNode, error) {
 		return nil, err
 	}
 	return node, nil
+}
+
+func ParseNodeFromBytes(c cid.Cid, b []byte) (format.Node, error) {
+	codec := c.Prefix().Codec
+	switch codec {
+	case cid.DagProtobuf:
+		return ParseProtoNode(b)
+	case cid.Raw:
+		return ParseRawNode(b)
+	default:
+		return nil, fmt.Errorf("invalid codec: %d (%s)", codec, cid.CodecToStr[codec])
+	}
 }
 
 func GetLink(node *merkledag.ProtoNode, name string) (cid.Cid, error) {

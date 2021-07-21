@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/google/ent/utils"
 	"github.com/ipfs/go-cid"
 	format "github.com/ipfs/go-ipld-format"
 	"github.com/ipfs/go-merkledag"
@@ -33,10 +34,11 @@ var catCmd = &cobra.Command{
 		var node format.Node
 
 		for {
-			node, err = nodeService.Get(context.Background(), base)
+			obj, err := nodeService.GetObject(context.Background(), base.Hash())
 			if err != nil {
-				log.Fatalf("could not fetch node: %v", err)
+				log.Fatalf("could not fetch object: %v", err)
 			}
+			node, err = utils.ParseNodeFromBytes(base, obj)
 			if len(pathSegments) > 0 {
 				s := pathSegments[0]
 				pathSegments = pathSegments[1:]
