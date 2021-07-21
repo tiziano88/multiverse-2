@@ -136,8 +136,9 @@ Directories not specified in `entplan.toml` are left unaffected.
 It is conceptually similar to
 [git submodules](https://git-scm.com/book/en/v2/Git-Tools-Submodules).
 
-**TRY ME**: To try this out this functionality in this repository, run
-`ent make` from the repository root; this will create the directory `tools` and
-pull into it a specific version of NodeJS and prettier, as per `entplan.toml`;
-after this, running `./format` automatically formats this README using those
-specific versions.
+**TRY ME**: To try this out this functionality in this repository, after
+configuring the remotes as above, run `ent make --remote=obj` from the
+repository root; this will create the directory `tools` and pull into it a
+specific version of NodeJS and prettier, as per `entplan.toml`; after this, run
+`./format` to automatically format this README using those specific versions of
+the tools.
