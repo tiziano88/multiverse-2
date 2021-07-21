@@ -117,12 +117,13 @@ the following:
 
 ```toml
 [[overrides]]
-path = "example"
-from = "bafybeie46l4ev3o5jvzsuuwdnrp3z45522crey6oaauilgimvlyngokoxm"
+path = "tools/node"
+from = "bafkreidhwdqb3p6lqzxe55na5hrdrw7d5meput4mpfcixcspo2nevbbafi"
+executable = true
 
 [[overrides]]
-path = "test/cmd"
-from = "bafybeidglc4sbje2sbrfmr6ukt2db5alsg3annuwzjlj3pjpyqh2vh2go4"
+path = "tools/prettier"
+from = "bafybeihnebwksdlbbimznfp7b2itgw6rzqg556vzpnxhdtekwx2ddbvbty"
 ```
 
 Each `overrides` entry specifies a local path and the id of a node to pull into
